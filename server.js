@@ -64,7 +64,7 @@ async function refreshAccessToken() {
   }
 }
 
-// 20시간마다 갱신 시도
+// 20시간마다 자동 갱신
 setInterval(refreshAccessToken, 1000 * 60 * 60 * 20);
 
 // -------------------------------
@@ -82,7 +82,6 @@ async function createSession() {
     });
     const data = await res.json();
     if (data?.content?.url) {
-      console.log("✅ 세션 URL 획득:", data.content.url);
       return data.content.url;
     } else {
       console.log("❌ 세션 생성 실패:", data);
@@ -94,50 +93,95 @@ async function createSession() {
 }
 
 // -------------------------------
-// 치지직 WebSocket 연결
+// 개선된 WebSocket 연결 (자동 복구 포함)
 // -------------------------------
 async function connectChzzkSocket() {
   console.log("🔗 치지직 WebSocket 연결 시도...");
+
   const sessionURL = await createSession();
-  if (!sessionURL) return;
 
-  const ws = new WebSocket(sessionURL, {
-    rejectUnauthorized: false,
-  });
-
-  ws.on("open", () => {
-    console.log("✅ 소켓 연결 완료");
-  });
-
-  ws.on("message", (msg) => {
-    try {
-      const data = JSON.parse(msg);
-      if (data?.bdy?.chatMessage) {
-        const chat = JSON.parse(data.bdy.chatMessage);
-        const nickname = chat.profile?.nickname || "익명";
-        const message = chat.msg || "";
-        io.emit("chat", { nickname, message });
-        console.log("💬", nickname + ":", message);
-      }
-    } catch (err) {
-      console.error("메시지 처리 오류:", err);
+  if (!sessionURL) {
+    console.error("❌ 세션 생성 실패: sessionURL이 null입니다. Access Token이 만료되었을 수 있습니다.");
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      console.log("🔁 토큰 갱신 후 세션 재시도...");
+      return connectChzzkSocket();
+    } else {
+      console.error("❌ 토큰 갱신 실패: 새 Access Token 발급이 필요합니다.");
+      console.error(
+        "👉 새 인증 URL:",
+        `https://chzzk.naver.com/account-interlock?clientId=${CLIENT_ID}&redirectUri=https://chzzk-overlay-server.onrender.com/api/chzzk/auth/callback&state=abc123`
+      );
+      return;
     }
-  });
+  }
 
-  ws.on("close", () => {
-    console.log("⚠️ 소켓 연결 종료됨, 5초 후 재시도...");
-    setTimeout(connectChzzkSocket, 5000);
-  });
+  if (!sessionURL.includes("?auth=")) {
+    console.error("❌ 세션 URL에 auth 토큰이 없습니다! 세션이 유효하지 않습니다.");
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      console.log("🔁 토큰 갱신 후 세션 재시도...");
+      return connectChzzkSocket();
+    }
+    return;
+  }
 
-  ws.on("error", (err) => {
-    console.error("❌ 소켓 오류:", err);
-  });
+  console.log("✅ 세션 URL 획득:", sessionURL);
+
+  try {
+    setImmediate(() => {
+      const ws = new WebSocket(sessionURL, { rejectUnauthorized: false });
+
+      ws.on("open", () => {
+        console.log("✅ 치지직 소켓 연결 완료");
+      });
+
+      ws.on("message", (raw) => {
+        try {
+          const data = JSON.parse(raw);
+          if (data?.bdy?.chatMessage) {
+            const chat = JSON.parse(data.bdy.chatMessage);
+            const nickname = chat.profile?.nickname || "익명";
+            const message = chat.msg || "";
+            io.emit("chat", { nickname, message });
+            console.log("💬", nickname + ":", message);
+          }
+        } catch (err) {
+          console.error("메시지 파싱 오류:", err);
+        }
+      });
+
+      ws.on("error", async (err) => {
+        console.error("❌ 소켓 오류:", err.message || err);
+
+        // 401 / INVALID_TOKEN 감지 시 자동 토큰 갱신
+        if (String(err).includes("401") || String(err).includes("INVALID_TOKEN")) {
+          console.log("🔄 Access Token 재갱신 시도...");
+          const refreshed = await refreshAccessToken();
+          if (refreshed) {
+            console.log("✅ 토큰 갱신 성공, 재연결 중...");
+            return connectChzzkSocket();
+          } else {
+            console.error("❌ 토큰 재갱신 실패. 새 인증이 필요합니다.");
+          }
+        }
+      });
+
+      ws.on("close", (code, reason) => {
+        console.warn(`⚠️ 소켓 연결 종료됨 (${code}): ${reason}`);
+        console.log("⏳ 5초 후 재연결 시도...");
+        setTimeout(connectChzzkSocket, 5000);
+      });
+    });
+  } catch (err) {
+    console.error("❌ WebSocket 연결 중 예외 발생:", err);
+  }
 }
 
 connectChzzkSocket();
 
 // -------------------------------
-// WebSocket (오버레이 클라이언트)
+// 오버레이 클라이언트 (socket.io)
 // -------------------------------
 io.on("connection", (socket) => {
   console.log("🟢 오버레이 클라이언트 연결됨:", socket.id);
@@ -145,7 +189,7 @@ io.on("connection", (socket) => {
 });
 
 // -------------------------------
-// API 엔드포인트 (시청자 수)
+// 시청자 수 API
 // -------------------------------
 app.get("/api/viewers", async (req, res) => {
   const { channelId } = req.query;
