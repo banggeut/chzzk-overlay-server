@@ -1,5 +1,5 @@
 // ✅ 실제 치지직 채널 ID 입력
-const channelId = "f00f6d46ecc6d735b96ecf376b9e5212";
+const channelId = "72540e0952096b201da89e667b70398b";
 
 // ✅ 배포된 서버 주소
 const serverUrl = "https://chzzk-overlay-server.onrender.com";

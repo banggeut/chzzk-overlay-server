@@ -13,7 +13,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
+const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
 
 let chzzkSocket = null;
 
