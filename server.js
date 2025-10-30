@@ -13,7 +13,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212"; // ✅ 채널 ID
+const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
 
 let chzzkSocket = null;
 
@@ -95,9 +95,11 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (channelId 단일 값으로 수정)
+// ✅ 채팅 구독 (channelId 단일 값 + 로그 추가)
 async function subscribeChatEvent(sessionKey) {
   try {
+    console.log("📨 구독 요청 보냄:", { sessionKey, channelId: CHANNEL_ID });
+
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
       method: "POST",
       headers: {
@@ -107,11 +109,13 @@ async function subscribeChatEvent(sessionKey) {
       },
       body: JSON.stringify({
         sessionKey,
-        channelId: CHANNEL_ID, // ✅ 문서 기준 단일 값
+        channelId: CHANNEL_ID,
       }),
     });
 
     const data = await res.json();
+    console.log("📨 구독 응답 전체:", data);
+
     if (data.code === 200) {
       console.log(`✅ 채팅 이벤트 구독 성공 (${CHANNEL_ID})`);
     } else {
@@ -152,12 +156,12 @@ function connectChzzkSocketIO(sessionURL) {
     }
   });
 
-  // ✅ CHAT 이벤트 수신 (문서 기준 유지)
+  // ✅ CHAT 이벤트 수신
   socket.on("CHAT", (data) => {
     try {
       const chat = JSON.parse(data.bdy.chatMessage);
       const nickname = chat.profile?.nickname || "익명";
-      const message = chat.content || chat.msg || ""; // ✅ 필드 보강
+      const message = chat.content || chat.msg || "";
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
     } catch (err) {
@@ -261,29 +265,6 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
 (async () => {
   await startChatConnection();
 })();
-
-// ✅ 시청자 수 API
-app.get("/api/viewers", async (req, res) => {
-  const { channelId } = req.query;
-  if (tokenExpired || !ACCESS_TOKEN)
-    return res.json({ viewers: 0, error: "Token Expired or Missing" });
-
-  try {
-    const response = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${channelId}/viewers`, {
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-    });
-    const data = await response.json();
-    if (data.code === 401) {
-      tokenExpired = true;
-      res.status(401).json({ error: "Token expired" });
-      if (REFRESH_TOKEN) startChatConnection();
-      return;
-    }
-    res.json({ viewers: data?.content?.viewers || 0 });
-  } catch {
-    res.status(500).json({ error: "Viewer fetch failed" });
-  }
-});
 
 // ✅ 오버레이 클라이언트 연결
 io.on("connection", (socket) => {
