@@ -15,19 +15,37 @@ async function fetchViewerCount() {
 }
 
 async function connectChat() {
-    const ws = new WebSocket(`${serverUrl.replace("https", "wss")}/ws/chat/${channelId}`);
+    // 명시적으로 wss:// 형태의 WebSocket 주소 지정
+    const wsUrl = `wss://chzzk-overlay-server.onrender.com/ws/chat/${channelId}`;
+    console.log("🔗 WebSocket 연결 시도:", wsUrl);
 
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        const div = document.createElement("div");
-        div.className = "chat-message";
-        div.textContent = msg.nickname + ": " + msg.message;
-        chatMessages.appendChild(div);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log("✅ 오버레이 서버에 연결됨!");
     };
 
-    ws.onclose = () => {
-        console.log("🔁 재연결 시도 중...");
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            const div = document.createElement("div");
+            div.className = "chat-message";
+            div.textContent = `${msg.nickname}: ${msg.message}`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // 자동 스크롤
+        } catch (err) {
+            console.error("메시지 파싱 오류:", err);
+        }
+    };
+
+    ws.onclose = (e) => {
+        console.warn("⚠️ WebSocket 연결 종료됨, 3초 후 재연결:", e.reason);
         setTimeout(connectChat, 3000);
+    };
+
+    ws.onerror = (err) => {
+        console.error("❌ WebSocket 오류:", err);
+        ws.close();
     };
 }
 
