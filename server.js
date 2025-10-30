@@ -279,6 +279,20 @@ function connectChzzkSocketIO(sessionURL) {
       // 💬 오버레이 클라이언트로 전송 (이벤트 이름: chatMessage)
       io.emit("chatMessage", { nickname, message, emojis });
       console.log("💬", nickname + ":", message);
+      // 디버깅: 이모지 구조 로깅 (없을 경우 원본 페이로드 일부 출력)
+      if (!chatData.emojis || Object.keys(emojis).length === 0) {
+        try {
+          const hasToken = /\{:[^}]+:\}/.test(message);
+          if (hasToken) {
+            console.log("🧩 이모지 원본 구조:", JSON.stringify(chatData.emojis));
+            console.log("🧩 CHAT 원본 일부:", JSON.stringify({
+              content: chatData.content,
+              msg: chatData.msg,
+              extra: chatData.extra,
+            }));
+          }
+        } catch {}
+      }
 
       if (Object.keys(emojis).length > 0) console.log("🧩 이모지:", emojis);
       if (badges.length > 0) console.log("🎖️ 뱃지:", badges);
@@ -356,7 +370,13 @@ async function getViewerCount() {
     try {
         const headers = { "Client-Id": CLIENT_ID };
         if (ACCESS_TOKEN) headers["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
-        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers });
+        // 공용 헤더(차단 회피 및 안정화)
+        const commonHeaders = {
+          "User-Agent": "Mozilla/5.0 (compatible; CHZZK-Overlay/1.0; +https://render.com)",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "ko,en;q=0.9"
+        };
+        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers: { ...headers, ...commonHeaders } });
         let text = await res.text();
         let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
         
@@ -367,19 +387,26 @@ async function getViewerCount() {
             return count;
         } else {
             console.log("⚠️ 시청자 수 응답:", data);
-            // 대체 엔드포인트 시도 (서비스 v2)
-            try {
-              res = await fetch(`https://api.chzzk.naver.com/service/v2/channels/${CHANNEL_ID}/live-status`);
-              text = await res.text();
-              try { data = JSON.parse(text); } catch { data = { raw: text }; }
-              const count = data?.content?.livePlayInfo?.concurrentUserCount ?? data?.content?.livePlayInfo?.viewerCount;
-              if (typeof count === 'number') {
-                console.log(`👁️ 시청자 수(v2): ${count}`);
-                io.emit("viewerCount", count);
-                return count;
+            // 대체 엔드포인트 시도 (서비스 v2, 재시도 2회, 2s 타임아웃)
+            const v2Url = `https://api.chzzk.naver.com/service/v2/channels/${CHANNEL_ID}/live-status`;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 2000);
+                res = await fetch(v2Url, { headers: commonHeaders, signal: controller.signal });
+                clearTimeout(timer);
+                text = await res.text();
+                try { data = JSON.parse(text); } catch { data = { raw: text }; }
+                const count = data?.content?.livePlayInfo?.concurrentUserCount ?? data?.content?.livePlayInfo?.viewerCount;
+                if (typeof count === 'number') {
+                  console.log(`👁️ 시청자 수(v2): ${count}`);
+                  io.emit("viewerCount", count);
+                  return count;
+                }
+                console.log(`⚠️ v2 응답(${attempt}/3):`, data);
+              } catch (e) {
+                console.log(`⚠️ v2 시도 실패(${attempt}/3):`, e?.message || e);
               }
-            } catch (e) {
-              console.log("⚠️ v2 시청자 수 조회 실패:", e?.message || e);
             }
             io.emit("viewerCount", 0);
             return 0;
