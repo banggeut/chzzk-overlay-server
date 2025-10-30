@@ -10,7 +10,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 10000;
 
-// ⚙️ 환경변수
+// ⚙️ 환경 변수 설정
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID || "ef64115b-8119-43ba-9e9c-81d9106f93ae";
 const ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 const CHANNEL_ID = process.env.CHZZK_CHANNEL_ID;
@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
   res.send("✅ CHZZK Overlay Server is Running");
 });
 
-// ✅ Access Token 발급 콜백 처리 라우트
+// ✅ Access Token 발급 콜백 라우트
 app.get("/api/chzzk/auth/callback", async (req, res) => {
   const code = req.query.code;
 
@@ -29,7 +29,6 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 
   try {
-    // 🔄 Access Token 교환
     const tokenRes = await fetch("https://openapi.chzzk.naver.com/open/v1/auth/token", {
       method: "POST",
       headers: {
@@ -60,24 +59,27 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 });
 
-// ✅ 세션 생성 함수
+// ✅ 세션 생성 함수 (POST 방식으로 수정됨)
 async function createSession() {
   console.log("--- 채팅 연결 전체 프로세스 시작 ---");
   const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions", {
-    method: "GET",
+    method: "POST", // ✅ 여기서 POST 로 수정!
     headers: {
       Authorization: `Bearer ${ACCESS_TOKEN}`,
       "Client-Id": CLIENT_ID,
+      "Content-Type": "application/json",
     },
   });
 
   const result = await res.json();
-
-  // 전체 응답 디버그 출력
   console.log("🧩 세션 생성 응답:", JSON.stringify(result, null, 2));
 
   const sessionUrl = result?.content?.session?.serverUrl;
-  if (!sessionUrl) throw new Error("세션 URL이 없습니다.");
+  if (!sessionUrl) {
+    console.error("❌ 세션 URL 없음 — 응답 원문:", result);
+    throw new Error("세션 URL이 없습니다.");
+  }
+
   console.log("✅ 세션 URL 획득:", sessionUrl);
   return sessionUrl;
 }
@@ -102,7 +104,7 @@ async function connectToChzzk() {
       console.log("🔴 소켓 연결 종료");
     });
 
-    // SYSTEM 이벤트 수신
+    // ✅ SYSTEM 이벤트 수신
     socket.on("SYSTEM", async (data) => {
       console.log("🟢 SYSTEM 이벤트 수신:", data);
 
@@ -110,7 +112,7 @@ async function connectToChzzk() {
         const sessionKey = data.data.sessionKey;
         console.log("🔑 세션 키 획득:", sessionKey);
 
-        // CHAT 구독 요청
+        // ✅ CHAT 이벤트 구독 요청
         try {
           const res = await fetch(
             `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`,
@@ -139,7 +141,7 @@ async function connectToChzzk() {
       }
     });
 
-    // CHAT 이벤트 수신
+    // ✅ CHAT 이벤트 수신
     socket.on("CHAT", (data) => {
       console.log("💬 CHAT 이벤트 수신:", data);
       io.emit("chat", {
@@ -151,7 +153,7 @@ async function connectToChzzk() {
       });
     });
 
-    // DONATION 이벤트 수신
+    // ✅ DONATION 이벤트 수신
     socket.on("DONATION", (data) => {
       console.log("🎁 DONATION 이벤트 수신:", data);
       io.emit("donation", data);
