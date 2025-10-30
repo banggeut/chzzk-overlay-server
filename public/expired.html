@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Access Token 만료됨</title>
+  <style>
+    body {
+      background: #111;
+      color: #fff;
+      font-family: "Pretendard", sans-serif;
+      text-align: center;
+      margin-top: 20%;
+    }
+    a {
+      color: #00ffcc;
+      text-decoration: none;
+      font-size: 1.2em;
+      border: 1px solid #00ffcc;
+      padding: 10px 15px;
+      border-radius: 6px;
+    }
+    a:hover {
+      background: #00ffcc;
+      color: #111;
+    }
+  </style>
+</head>
+<body>
+  <h2>⚠️ 인증이 만료되었습니다</h2>
+  <p>치지직 API Access Token이 만료되어 새 로그인이 필요합니다.</p>
+  <a href="https://chzzk.naver.com/account-interlock?clientId=ef64115b-8119-43ba-9e9c-81d9106f93ae&redirectUri=https://chzzk-overlay-server.onrender.com/api/chzzk/auth/callback&state=abc123"
+     target="_blank">🔑 새로 로그인하러 가기</a>
+</body>
+</html>
