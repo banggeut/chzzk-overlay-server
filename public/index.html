@@ -1,28 +1,46 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chzzk Overlay</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Live Style Chat Widget</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div id="overlayContainer">
-        <!-- 상단 오른쪽 정보바 -->
-        <div class="top-right-status">
-            <div class="live-label">LIVE</div>
-            <div class="viewer-label">시청자</div>
-            <div id="viewerCount" class="viewer-count">0</div>
-        </div>
-
-        <!-- 채팅 메시지 영역 -->
-        <div id="chatMessages" class="chat-container"></div>
+    
+    <div class="top-left-info">
+        <img src="streamer_profile.png" class="streamer-profile-img" alt="Streamer Profile">
+        <span class="streamer-username">라빈 라비린스</span>
     </div>
 
-    <!-- Socket.IO 클라이언트 (반드시 script.js보다 위에 있어야 함) -->
+    <div class="top-right-status">
+        <div class="live-badge">LIVE</div>
+        <div class="viewer-count" id="viewerCount">👁️ 0</div>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages"></div>
+    </div>
+    
+    <div class="heart-container" id="heartContainer"></div>
+
+    <div class="bottom-left-input">
+        <div class="input-placeholder">댓글 달기...</div>
+    </div>
+
+    <div class="bottom-right-icons">
+        <img src="new_icon.png" class="icon-img new-icon" alt="New Icon">
+        <img src="heart_empty.png" class="icon-img" id="emptyHeartIcon" alt="Like Icon">
+    </div>
+
+    <!-- Socket.IO 클라이언트 (중요) -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-    <!-- 오버레이용 스크립트 -->
+    <!-- 오버레이 기능 스크립트 -->
     <script src="script.js"></script>
 </body>
 </html>

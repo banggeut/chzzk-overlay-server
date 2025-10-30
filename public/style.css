@@ -1,18 +1,28 @@
+/* style.css 전문 (하트 컨테이너 right 위치 조정) */
 body {
+    background-color: transparent !important;
     margin: 0;
+    padding: 0;
     overflow: hidden;
-    background: transparent;
-    font-family: 'Pretendard', sans-serif;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: white;
 }
 
-/* 메인 컨테이너 */
-#overlayContainer {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+/* ==================================== */
+/* 1. 상단 정보바 스타일 (크기 유지) */
+/* ==================================== */
+/* 상단 왼쪽 정보바 (프로필 + 닉네임) - 크기 유지 */
+.top-left-info {
+    position: fixed;
+    top: 20px; 
+    left: 20px; 
+    display: flex;
+    align-items: center;
+    z-index: 20;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.7);
 }
 
-/* 상단 오른쪽 정보바 (LIVE, 시청자 수) - 기존 유지 */
+/* 상단 오른쪽 정보바 (LIVE, 시청자 수) - 크기 유지 */
 .top-right-status {
     position: fixed;
     top: 20px; 
@@ -24,78 +34,193 @@ body {
     text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.7);
 }
 
-.live-label {
-    color: white;
-    background: red;
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 14px;
-    letter-spacing: 0.5px;
-}
+/* 스트리머 프로필/닉네임/뱃지/시청자수 크기 유지 */
+.streamer-profile-img { width: 70px; height: 70px; border-radius: 50%; background-color: #f0f0f0; margin-right: 16px; border: 4px solid white; }
+.streamer-username { font-weight: 700; font-size: 32px; }
+.live-badge { background-color: #ed4956; color: white; font-weight: 700; font-size: 24px; padding: 4px 12px; border-radius: 8px; }
+.viewer-count { background-color: rgba(0, 0, 0, 0.4); color: white; font-size: 28px; padding: 4px 16px; border-radius: 24px; }
 
-.viewer-label {
-    color: white;
-    font-size: 14px;
-    opacity: 0.8;
-}
 
-.viewer-count {
-    color: #ff66aa;
-    font-weight: 600;
-    font-size: 16px;
-}
+/* ==================================== */
+/* 2. 하단 입력바 스타일 (30% 축소) */
+/* ==================================== */
 
-/* 채팅창 영역 */
-.chat-container {
-    position: absolute;
-    bottom: 40px;
-    left: 40px;
-    width: 420px;
-    max-height: 80vh;
-    overflow-y: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-/* 개별 채팅 메시지 */
-.chat-message {
+/* 하단 왼쪽 입력바 컨테이너 */
+.bottom-left-input {
+    position: fixed;
+    bottom: 20px; 
+    left: 20px; 
+    width: 500px; 
+    height: 60px; 
     display: flex;
     align-items: center;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 8px 14px;
-    color: white;
-    animation: fadeInUp 0.3s ease-out;
-    backdrop-filter: blur(6px);
+    padding: 0;
+    z-index: 20;
 }
 
-/* 닉네임 강조 */
-.chat-message .nickname {
-    font-weight: 600;
-    margin-right: 6px;
-    color: #ff8fc7;
+.input-placeholder {
+    flex-grow: 1; 
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 15px 25px; 
+    border-radius: 35px; 
+    font-size: 20px; 
+    border: 2px solid rgba(255, 255, 255, 0.5); 
+    height: 30px; 
+    line-height: 30px; 
 }
 
-/* 하트 애니메이션 (디자인용) */
-.heart {
-    position: absolute;
-    bottom: 50px;
-    right: 50px;
-    width: 32px;
-    height: 32px;
-    background: url('heart_red.png') no-repeat center / contain;
+/* 하단 오른쪽 아이콘 컨테이너 */
+.bottom-right-icons {
+    position: fixed;
+    bottom: 20px; 
+    right: 20px; 
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 16px; 
+}
+
+/* 하단 아이콘 이미지 스타일 */
+.bottom-right-icons .icon-img {
+    width: 48px; 
+    height: 48px;
+    filter: drop-shadow(2px 2px 6px rgba(0, 0, 0, 0.7)); 
+}
+
+
+/* ==================================== */
+/* 3. 채팅 컨테이너 스타일 (30% 축소) */
+/* ==================================== */
+.chat-container {
+    position: fixed;
+    top: 120px; 
+    bottom: 90px; 
+    left: 20px;
+    width: 500px;
+    
+    display: flex;
+    flex-direction: column; 
+    justify-content: flex-end; 
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.chat-messages {
+    display: flex;
+    flex-direction: column;
+    padding-top: 20px; 
+}
+
+
+/* ==================================== */
+/* 4. 채팅 메시지 스타일 (30% 축소) */
+/* ==================================== */
+
+.chat-message-item {
+    background-color: transparent;
+    border-radius: 0;
+    padding: 4px 0px; 
+    margin-bottom: 15px; 
+    max-width: 80%;
+    width: fit-content;
+    word-wrap: break-word;
+    box-shadow: none;
+    
+    display: flex;
+    align-items: flex-start;
+    
     opacity: 0;
-    animation: floatUp 1.2s ease-in-out forwards;
+    transform: translateY(15px); 
+    animation: fadeInMessage 0.3s ease-out forwards;
 }
 
-@keyframes floatUp {
-    0% { transform: translateY(0) scale(1); opacity: 1; }
-    100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
+.chat-profile-img {
+    width: 45px; 
+    height: 45px; 
+    border-radius: 50%;
+    background-color: #f0f0f0; 
+    margin-right: 12px; 
+    border: 2px solid rgba(255, 255, 255, 0.5); 
+    flex-shrink: 0;
 }
 
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+.chat-text-container {
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    line-height: 1.2;
+    width: fit-content;
+}
+
+.chat-username {
+    font-weight: 700;
+    font-size: 24px; 
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); 
+    line-height: 1.2;
+}
+
+.chat-text {
+    font-size: 20px; 
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); 
+    line-height: 1.2;
+    word-break: break-all;
+}
+
+
+/* ==================================== */
+/* 5. 애니메이션 스타일 (크기 유지) */
+/* ==================================== */
+@keyframes fadeInMessage { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeOutMessage { 0% { opacity: 1; } 100% { opacity: 0; } }
+.fade-out { animation: fadeOutMessage 0.5s ease-out forwards; }
+
+
+/* ==================================== */
+/* 6. 하트 애니메이션 스타일 (크기 유지) */
+/* ==================================== */
+.heart-container {
+    position: fixed;
+    /* ★★★ 수정: right를 빈 하트 아이콘의 오른쪽 마진을 고려하여 조정 ★★★ */
+    right: 20px; /* bottom-right-icons의 right와 일치 */
+    bottom: 20px; /* bottom-right-icons의 bottom과 일치 */
+    
+    /* 너비를 좁혀서 하트가 더 밀집해서 올라오도록 조정 */
+    width: 60px; /* 기존 120px에서 줄여서 빈 하트 아이콘 위에 집중 */
+    height: 60px; /* 하트가 시작하는 영역으로 사용 */
+
+    /* heart-container가 빈 하트 아이콘의 중앙에 위치하도록 조정 */
+    transform: translateX(calc(100% - 48px)); /* 48px는 icon-img의 너비 */
+    
+    top: auto; /* top 설정 제거 */
+    pointer-events: none;
+    z-index: 5;
+    display: flex;
+    flex-direction: column-reverse; /* 하트가 아래에서 위로 쌓이도록 */
+    align-items: center;
+    justify-content: flex-start; /* 하트가 컨테이너 하단에서 시작하도록 */
+    overflow: hidden; /* 컨테이너 밖으로 나가는 하트는 가림 */
+}
+
+/* 하트 아이콘 크기 및 애니메이션 */
+.heart-icon { 
+    width: 60px; /* 80px → 60px로 줄여서 빈 하트 아이콘에 더 가깝게 */
+    height: 60px; /* 80px → 60px */
+    opacity: 0; 
+    position: absolute; 
+    bottom: 0; /* heart-container의 bottom에서 시작 */
+    animation: heartRise 3s ease-out forwards; 
+    filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); 
+}
+@keyframes heartRise { 
+    0% { transform: translateY(0) scale(0.8); opacity: 0; } 
+    10% { transform: translateY(-40px) scale(1); opacity: 1; } /* 시작점 위로 약간 솟아오름 */
+    80% { transform: translateY(-300px) scale(0.9); opacity: 1; } /* 이전보다 덜 올라가도록 */
+    100% { transform: translateY(-400px) scale(0.7); opacity: 0; } /* 이전보다 덜 올라가도록 */
 }
