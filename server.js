@@ -156,10 +156,9 @@ async function createSession() {
 // ✅ 채팅 구독 (채널 ID 필수 포함)
 async function subscribeChatEvent(sessionKey) {
   try {
-    console.log("📨 구독 요청 보냄(Query 방식):", { sessionKey, channelId: CHANNEL_ID });
+    console.log("📨 구독 요청 보냄:", { sessionKey, channelId: CHANNEL_ID });
 
-    // 방식 A: QueryString 방식 (현재 코드)
-    let res = await fetch(
+    const res = await fetch(
       `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${encodeURIComponent(sessionKey)}&channelId=${encodeURIComponent(CHANNEL_ID)}`,
       {
         method: "POST",
@@ -171,30 +170,10 @@ async function subscribeChatEvent(sessionKey) {
       }
     );
 
-    let text = await res.text();
+    const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    console.log("📨 [A] 구독 응답:", data);
-
-    if (!(data && data.code === 200)) {
-      // 방식 B: Body 방식 (호환성 대비)
-      console.log("📨 구독 요청 보냄(Body 방식 대체):", { sessionKey, channelId: CHANNEL_ID });
-      res = await fetch(
-        `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`,
-            "Client-Id": CLIENT_ID,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ sessionKey, channelId: CHANNEL_ID })
-        }
-      );
-      text = await res.text();
-      try { data = JSON.parse(text); } catch { data = { raw: text }; }
-      console.log("📨 [B] 구독 응답:", data);
-    }
+    console.log("📨 구독 응답:", data);
 
     if (data && data.code === 200) {
       console.log(`✅ 채팅 이벤트 구독 요청 성공 (${CHANNEL_ID})`);
@@ -225,13 +204,16 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
 
-  // ✅ SYSTEM 이벤트 처리
+  // ✅ SYSTEM 이벤트 처리 (문자열 페이로드 대비)
   socket.on("SYSTEM", (data) => {
-    const systemData = data;
-    console.log("🟢 SYSTEM 이벤트 수신:", systemData);
+    let systemData = data;
+    if (typeof systemData === 'string') {
+      try { systemData = JSON.parse(systemData); } catch { console.warn("SYSTEM 페이로드 파싱 실패", systemData); }
+    }
+    console.log("🟢 SYSTEM 이벤트 수신:", typeof systemData === 'object' ? JSON.stringify(systemData) : systemData);
 
     // connected 이벤트 처리: 세션 키 수신 후 1초 뒤 구독 요청
-    if (systemData?.type === "connected" && systemData?.data?.sessionKey) {
+    if (systemData && systemData.type === "connected" && systemData.data && systemData.data.sessionKey) {
       const sessionKey = systemData.data.sessionKey;
       console.log("🔑 세션키 수신됨:", sessionKey);
       console.log("⏳ 1초 후 채팅 구독 시도...");
@@ -249,7 +231,7 @@ function connectChzzkSocketIO(sessionURL) {
     }
 
     // subscribed 이벤트 처리 (구독 완료 확인용)
-    if (systemData?.type === "subscribed" && systemData?.data?.eventType === "CHAT") {
+    if (systemData && systemData.type === "subscribed" && systemData.data && systemData.data.eventType === "CHAT") {
       console.log(`✅ CHAT 이벤트 구독 확인 완료 (채널: ${systemData.data.channelId})`);
       chatSubscribed = true;
     }
@@ -258,7 +240,10 @@ function connectChzzkSocketIO(sessionURL) {
   // ✅ CHAT 이벤트 수신
   socket.on("CHAT", (data) => {
     try {
-      const chatData = data;
+      let chatData = data;
+      if (typeof chatData === 'string') {
+        try { chatData = JSON.parse(chatData); } catch { console.warn("CHAT 페이로드 파싱 실패", chatData); }
+      }
       const nickname = chatData.profile?.nickname || "익명";
       const message = chatData.content || chatData.msg || ""; 
       const emojis = chatData.emojis || {};
