@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
 import { fileURLToPath } from "url";
-import ioClient from "socket.io-client";
+import ioClient from "socket.io-client"; // socket.io-client@2.0.3 사용됨
 
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID;
 const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
@@ -13,7 +13,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
+const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 본인의 채널 ID로 교체 필요!
 
 let chzzkSocket = null;
 
@@ -95,13 +95,13 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (쿼리 파라미터 방식)
+// ✅ 채팅 구독
 async function subscribeChatEvent(sessionKey) {
   try {
     console.log("📨 구독 요청 보냄:", { sessionKey });
 
     const res = await fetch(
-      `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`,
+      `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}&channelId=${CHANNEL_ID}`,
       {
         method: "POST",
         headers: {
@@ -125,7 +125,7 @@ async function subscribeChatEvent(sessionKey) {
   }
 }
 
-// ✅ 치지직 소켓 연결
+// ✅ 치지직 소켓 연결 (Socket.IO v2.x 호환되도록 수정)
 function connectChzzkSocketIO(sessionURL) {
   console.log("🔗 치지직 소켓 연결 시도...");
   const [baseUrl, query] = sessionURL.split("?");
@@ -133,9 +133,11 @@ function connectChzzkSocketIO(sessionURL) {
 
   if (chzzkSocket) chzzkSocket.disconnect();
 
+  // ⭐ Socket.IO v2.x 문법 및 Gist에 제시된 옵션으로 수정 ⭐
   const socket = ioClient(baseUrl, {
     transports: ["websocket"],
-    reconnection: false,
+    reconnection: false, // 재접속은 수동으로 처리하도록 off
+    forceNew: true, 
     timeout: 5000,
     query: { auth: authToken },
   });
@@ -145,11 +147,13 @@ function connectChzzkSocketIO(sessionURL) {
 
   // ✅ SYSTEM 이벤트 처리 (connected / subscribed 분리)
   socket.on("SYSTEM", (data) => {
-    console.log("🟢 SYSTEM 이벤트 수신:", data);
+    // data는 Array가 아닌 단일 JSON 객체로 수신됩니다. (ioClient v2.x)
+    const systemData = data;
+    console.log("🟢 SYSTEM 이벤트 수신:", systemData);
 
     // connected 이벤트 처리
-    if (data?.type === "connected" && data?.data?.sessionKey) {
-      const sessionKey = data.data.sessionKey;
+    if (systemData?.type === "connected" && systemData?.data?.sessionKey) {
+      const sessionKey = systemData.data.sessionKey;
       console.log("🔑 세션키 수신됨:", sessionKey);
       console.log("⏳ 1초 후 채팅 구독 시도...");
       setTimeout(() => {
@@ -158,18 +162,21 @@ function connectChzzkSocketIO(sessionURL) {
     }
 
     // subscribed 이벤트 처리 (구독 완료 확인용)
-    if (data?.type === "subscribed" && data?.data?.eventType === "CHAT") {
-      console.log(`✅ CHAT 이벤트 구독 확인 완료 (채널: ${data.data.channelId})`);
+    if (systemData?.type === "subscribed" && systemData?.data?.eventType === "CHAT") {
+      console.log(`✅ CHAT 이벤트 구독 확인 완료 (채널: ${systemData.data.channelId})`);
     }
   });
 
   // ✅ CHAT 이벤트 수신
   socket.on("CHAT", (data) => {
     try {
-      const nickname = data.profile?.nickname || "익명";
-      const message = data.content || data.msg || "";
-      const emojis = data.emojis || {};
-      const badges = data.profile?.badges || [];
+      // data는 Array가 아닌 단일 JSON 객체로 수신됩니다.
+      const chatData = data;
+      const nickname = chatData.profile?.nickname || "익명";
+      // content 필드를 사용합니다. (Gist 참고)
+      const message = chatData.content || chatData.msg || ""; 
+      const emojis = chatData.emojis || {};
+      const badges = chatData.profile?.badges || [];
 
       // 💬 오버레이로 전송 (이벤트 이름: chatMessage)
       io.emit("chatMessage", { nickname, message });
@@ -184,9 +191,11 @@ function connectChzzkSocketIO(sessionURL) {
   });
 
   socket.on("connect_error", (err) => {
-    console.error("❌ 소켓 오류:", err.message);
-    if (err.message.includes("401") || err.message.includes("INVALID_TOKEN")) {
+    console.error("❌ 소켓 연결 오류:", err.message || err);
+    // 토큰 오류가 발생하면 연결을 끊고 재시도
+    if (err.message && (err.message.includes("401") || err.message.includes("INVALID_TOKEN"))) {
       chzzkSocket.disconnect();
+      console.log("토큰 오류 발생. 5초 후 채팅 연결 재시도...");
       setTimeout(startChatConnection, 5000);
     }
   });
@@ -198,6 +207,9 @@ function connectChzzkSocketIO(sessionURL) {
       setTimeout(startChatConnection, 5000);
     }
   });
+
+  // ⭐ Gist에서 제시된 테스트 코드처럼 connect()를 명시적으로 호출 ⭐
+  socket.connect();
 }
 
 // ✅ 전체 연결
@@ -226,7 +238,7 @@ async function startChatConnection() {
 }
 
 
-// ⭐ [추가됨] 시청자 수 가져오기 및 클라이언트에게 전송
+// ⭐ 시청자 수 가져오기 및 클라이언트에게 전송
 async function getViewerCount() {
     try {
         // 치지직 API를 사용하여 시청자 수를 조회
@@ -255,8 +267,9 @@ async function getViewerCount() {
     }
 }
 
-// ⭐ [추가됨] 시청자 수 주기적으로 업데이트
+// ⭐ 시청자 수 주기적으로 업데이트
 async function startViewerCountUpdate() {
+    console.log("🔄 시청자 수 업데이트 타이머 시작 (30초 간격)");
     await getViewerCount(); // 서버 시작 시 즉시 1회 실행
     // 30초마다 시청자 수 업데이트
     setInterval(getViewerCount, 30000); 
@@ -318,7 +331,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
 // ✅ 초기 연결 시작 (채팅 및 시청자 수 업데이트)
 (async () => {
   await startChatConnection();
-  await startViewerCountUpdate(); // 추가됨
+  await startViewerCountUpdate();
 })();
 
 // ✅ 오버레이 클라이언트 연결
