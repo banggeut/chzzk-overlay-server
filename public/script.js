@@ -16,8 +16,8 @@ const socket = io(serverUrl, {
 // 서버 연결 성공 시
 socket.on("connect", () => {
     console.log("🟢 오버레이 서버 연결됨:", socket.id);
-    // 서버로 현재 채널 구독 요청
-    socket.emit("joinChannel", { channelId });
+    // [수정 사항] 서버가 이미 CHANNEL_ID를 통해 구독 중이므로, 클라이언트의 joinChannel 요청은 제거합니다.
+    // socket.emit("joinChannel", { channelId }); 
 });
 
 // 실시간 시청자 수 업데이트
@@ -25,9 +25,10 @@ socket.on("viewerCount", (data) => {
     viewerCountEl.textContent = `👁️ ${data}`;
 });
 
-// 실시간 채팅 메시지 수신
-socket.on("chatMessage", (msg) => {
-    addChatMessage(msg.nickname, msg.message);
+// [수정 사항] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'에서 'chat'으로 변경 (server.js와 일치)
+socket.on("chat", (msg) => {
+    // server.js에서 보내는 데이터 구조에 맞게 'content'를 'message'로 매핑하여 사용합니다.
+    addChatMessage(msg.nickname, msg.content); 
 });
 
 // 에러 및 연결 종료 처리
