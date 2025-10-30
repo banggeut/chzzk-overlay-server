@@ -1,7 +1,7 @@
 import express from "express";
 import fetch from "node-fetch";
 import { WebSocketServer } from "ws";
-import ioClient from "socket.io-client/dist/socket.io.js"; // v2 호환 import
+import ioClient from "socket.io-client/dist/socket.io.js"; // v2.x 호환 import
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,11 +9,13 @@ const PORT = process.env.PORT || 3000;
 // ✅ 환경 변수
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID || "ef64115b-8119-43ba-9e9c-81d9106f93ae";
 const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
-const ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN; // 로그인 후 발급받은 토큰 저장
+let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
+let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212";
 
 if (!CLIENT_SECRET) console.warn("⚠️ CLIENT_SECRET이 설정되지 않았습니다.");
 if (!ACCESS_TOKEN) console.warn("⚠️ CHZZK_ACCESS_TOKEN이 설정되지 않았습니다.");
+if (!REFRESH_TOKEN) console.warn("⚠️ CHZZK_REFRESH_TOKEN이 설정되지 않았습니다.");
 
 // ✅ 서버 시작
 const server = app.listen(PORT, () => {
@@ -59,16 +61,19 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
 
     const tokenData = await tokenRes.json();
 
-    if (tokenData.accessToken) {
-      console.log("✅ Access Token 발급 성공:", tokenData.accessToken);
-      console.log("🔁 Refresh Token:", tokenData.refreshToken);
+    if (tokenData.content?.accessToken) {
+      ACCESS_TOKEN = tokenData.content.accessToken;
+      REFRESH_TOKEN = tokenData.content.refreshToken;
+
+      console.log("✅ Access Token 발급 성공:", ACCESS_TOKEN);
+      console.log("🔁 Refresh Token:", REFRESH_TOKEN);
 
       return res.send(`
         <html>
           <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
             <h2>✅ Access Token 발급 성공!</h2>
-            <p>콘솔에 Access Token이 출력되었습니다.</p>
-            <p>Render 환경변수에 <code>CHZZK_ACCESS_TOKEN</code>으로 등록해주세요.</p>
+            <p>콘솔에 Access Token과 Refresh Token이 출력되었습니다.</p>
+            <p>Render 환경변수에 <code>CHZZK_ACCESS_TOKEN</code>, <code>CHZZK_REFRESH_TOKEN</code>으로 등록해주세요.</p>
           </body>
         </html>
       `);
@@ -82,12 +87,45 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 });
 
+// ✅ Access Token 자동 갱신 함수
+async function refreshAccessToken() {
+  console.log("🔄 Access Token 갱신 시도 중...");
+
+  try {
+    const res = await fetch("https://openapi.chzzk.naver.com/auth/v1/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grantType: "refresh_token",
+        refreshToken: REFRESH_TOKEN,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data?.content?.accessToken) {
+      ACCESS_TOKEN = data.content.accessToken;
+      REFRESH_TOKEN = data.content.refreshToken;
+      console.log("✅ Access Token 갱신 완료:", ACCESS_TOKEN);
+      return ACCESS_TOKEN;
+    } else {
+      console.error("❌ Access Token 갱신 실패:", data);
+    }
+  } catch (err) {
+    console.error("❌ Access Token 갱신 오류:", err);
+  }
+}
+
+// ✅ 토큰 만료 검사 (매 12시간마다 자동 갱신)
+setInterval(refreshAccessToken, 12 * 60 * 60 * 1000);
+
 // ✅ 치지직 세션 연결 및 채팅 구독
 async function connectChzzkChat() {
   console.log("🔗 치지직 WebSocket 연결 시도...");
 
   try {
-    // 1️⃣ 세션 생성 (Access Token 인증)
     const authRes = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/auth", {
       method: "GET",
       headers: {
@@ -97,6 +135,7 @@ async function connectChzzkChat() {
 
     if (!authRes.ok) {
       console.error("❌ 세션 생성 실패:", await authRes.text());
+      await refreshAccessToken();
       setTimeout(connectChzzkChat, 10000);
       return;
     }
@@ -111,7 +150,6 @@ async function connectChzzkChat() {
 
     console.log("✅ 세션 URL 획득:", socketUrl);
 
-    // 2️⃣ Socket.IO 연결
     const socket = ioClient(socketUrl, {
       transports: ["websocket"],
       reconnection: false,
@@ -119,15 +157,20 @@ async function connectChzzkChat() {
       forceNew: true,
     });
 
-    socket.on("connect", () => {
-      console.log("✅ 소켓 연결 완료");
+    socket.on("connect", () => console.log("✅ 소켓 연결 완료"));
+    socket.on("disconnect", () => {
+      console.warn("⚠️ 소켓 연결 종료됨. 재시도 중...");
+      setTimeout(connectChzzkChat, 10000);
+    });
+    socket.on("connect_error", (err) => {
+      console.error("❌ 소켓 연결 오류:", err.message);
+      setTimeout(connectChzzkChat, 10000);
     });
 
     socket.on("SYSTEM", async (data) => {
       if (!data?.sessionKey) return;
       console.log("✅ 세션키 수신:", data.sessionKey);
 
-      // 3️⃣ 채팅 구독 요청 (Access Token 인증)
       const subRes = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
         method: "POST",
         headers: {
@@ -148,7 +191,6 @@ async function connectChzzkChat() {
       console.log("✅ 채팅 구독 성공!");
     });
 
-    // 4️⃣ CHAT 이벤트 수신
     socket.on("CHAT", (msg) => {
       if (msg?.profile?.nickname && msg?.message) {
         console.log(`${msg.profile.nickname}: ${msg.message}`);
@@ -161,20 +203,12 @@ async function connectChzzkChat() {
         });
       }
     });
-
-    socket.on("disconnect", () => {
-      console.warn("⚠️ 소켓 연결 종료됨. 재시도 중...");
-      setTimeout(connectChzzkChat, 10000);
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("❌ 소켓 연결 오류:", err.message);
-      setTimeout(connectChzzkChat, 10000);
-    });
   } catch (err) {
     console.error("❌ 연결 오류:", err);
     setTimeout(connectChzzkChat, 10000);
   }
 }
 
+// ✅ 최초 실행
+await refreshAccessToken();
 connectChzzkChat();
