@@ -365,49 +365,7 @@ async function startChatConnection() {
 }
 
 
-// ⭐ 시청자 수 가져오기 및 클라이언트에게 전송
-async function getViewerCount() {
-    try {
-        const headers = { "Client-Id": CLIENT_ID };
-        if (ACCESS_TOKEN) headers["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
-        // 공용 헤더(차단 회피 및 안정화)
-        const commonHeaders = {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "ko,en;q=0.9",
-          "Origin": "https://chzzk.naver.com",
-          "Referer": "https://chzzk.naver.com/"
-        };
-        // 문서 기반 대안: 라이브 목록에서 내 채널을 필터링해 concurrentUserCount 사용
-        // GET /open/v1/lives (Client 인증만 필요) [docs]
-        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/lives?size=20`, { headers: { ...headers, ...commonHeaders } });
-        let text = await res.text();
-        let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
-        if (data && Array.isArray(data.data)) {
-          const match = data.data.find(item => item && item.channelId === CHANNEL_ID);
-          if (match && typeof match.concurrentUserCount === 'number') {
-            const count = match.concurrentUserCount;
-            console.log(`👁️ 시청자 수(lives): ${count}`);
-            io.emit("viewerCount", count);
-            return count;
-          }
-        }
-        console.log("⚠️ 라이브 목록에서 채널을 찾지 못했거나 시청자 수 없음:", data && (data.data ? data.data.length : data));
-        io.emit("viewerCount", 0);
-        return 0;
-    } catch (err) {
-        console.error("❌ 시청자 수 조회 오류:", err);
-        io.emit("viewerCount", 0);
-        return 0;
-    }
-}
-
-// ⭐ 시청자 수 주기적으로 업데이트
-async function startViewerCountUpdate() {
-    console.log("🔄 시청자 수 업데이트 타이머 시작 (30초 간격)");
-    await getViewerCount(); // 서버 시작 시 즉시 1회 실행
-    setInterval(getViewerCount, 30000); 
-}
+// (시청자 수 기능 제거)
 
 // ✅ 인증 콜백
 app.get("/api/chzzk/auth/callback", async (req, res) => {
@@ -450,7 +408,6 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       // ⭐ [수정 반영] 토큰 발급 후 파일 저장 및 연결 시작 ⭐
       await saveTokens();
       startChatConnection();
-      startViewerCountUpdate();
 
       res.send(`
         <html><head><meta charset="utf-8"/></head>
@@ -473,7 +430,6 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
 // ✅ 초기 연결 시작 (파일 로드 시도 후 시작)
 (async () => {
   await startChatConnection();
-  await startViewerCountUpdate();
 })();
 
 // ✅ 오버레이 클라이언트 연결

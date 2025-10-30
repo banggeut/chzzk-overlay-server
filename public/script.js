@@ -3,7 +3,6 @@ const serverUrl = window.location.origin;
 
 // HTML 요소 연결
 const chatMessages = document.getElementById("chatMessages");
-const viewerCountEl = document.getElementById("viewerCount");
 const heartContainer = document.getElementById("heartContainer"); // 추가: 하트 컨테이너 연결
 
 // ✅ Socket.IO로 서버와 연결
@@ -17,10 +16,7 @@ socket.on("connect", () => {
 });
 
 // 실시간 시청자 수 업데이트
-socket.on("viewerCount", (data) => {
-    const text = (typeof data === 'number' && data > 0) ? data : '—';
-    viewerCountEl.textContent = `👁️ ${text}`;
-});
+// (시청자 수 기능 제거)
 
 // [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)
 socket.on("chatMessage", (msg) => {
@@ -108,11 +104,19 @@ function createHeart() {
     // 주의: 이 파일들도 OBS에서 보이려면 웹 접근 가능한 URL이어야 합니다.
     heart.src = randomImage; 
 
-    // 하트 컨테이너 내에서 애니메이션 시작
-    heartContainer.appendChild(heart); 
+    // 애니메이션 자연스러움 향상: 약간의 좌우 오프셋/회전/시간 랜덤화
+    const offsetPx = Math.floor((Math.random() - 0.5) * 16); // -8px ~ +8px
+    heart.style.marginLeft = `${offsetPx}px`;
+    const deg = (Math.random() - 0.5) * 12; // -6deg ~ +6deg
+    heart.style.transform += ` rotate(${deg}deg)`;
+    const duration = 2.7 + Math.random() * 0.6; // 2.7s ~ 3.3s
+    heart.style.setProperty('--dur', `${duration}s`);
 
-    // style.css의 @keyframes heartRise에 따라 3초 후 DOM에서 제거
+    // 하트 컨테이너 내에서 애니메이션 시작
+    heartContainer.appendChild(heart);
+
+    // 애니메이션 종료 후 제거
     setTimeout(() => {
         heart.remove();
-    }, 3000); // 애니메이션 시간 (3s)과 일치
+    }, duration * 1000);
 }
