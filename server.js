@@ -22,6 +22,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 app.use(express.json());
+app.set('trust proxy', 1);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,10 +39,20 @@ app.get("/", (req, res) => {
 // ✅ 로그인 URL 동적 생성 라우트
 let lastState = "";
 app.get("/login", (req, res) => {
-  const redirectUri = `${req.protocol}://${req.get("host")}/api/chzzk/auth/callback`;
+  const xfProto = req.get('x-forwarded-proto');
+  const protocol = xfProto ? xfProto.split(',')[0].trim() : (req.protocol || 'https');
+  const host = req.get("host");
+  const redirectUri = `${protocol}://${host}/api/chzzk/auth/callback`;
   lastState = Math.random().toString(36).slice(2);
-  const authUrl = `https://chzzk.naver.com/account-interlock?clientId=${encodeURIComponent(CLIENT_ID)}&redirectUri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(lastState)}`;
-  if (!CLIENT_ID) return res.status(500).send("CLIENT_ID 미설정");
+  // 쿠키로도 보관 (인스턴스/탭 변화 대비)
+  res.setHeader('Set-Cookie', `oauth_state=${lastState}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+  const scope = 'chat openid profile email';
+  const authUrl = `https://chzzk.naver.com/account-interlock?clientId=${encodeURIComponent(CLIENT_ID)}&redirectUri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(lastState)}&scope=${encodeURIComponent(scope)}`;
+  if (!CLIENT_ID) {
+    console.error("/login 호출: CLIENT_ID 미설정");
+    return res.status(500).send("CLIENT_ID 미설정");
+  }
+  console.log("/login 호출 → CHZZK 리다이렉트", { redirectUri });
   res.redirect(authUrl);
 });
 
@@ -323,7 +334,13 @@ async function startViewerCountUpdate() {
 app.get("/api/chzzk/auth/callback", async (req, res) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).send("인증 코드가 없습니다.");
-  if (!state || state !== lastState) return res.status(400).send("state 검증 실패");
+  // 쿠키에서 state도 읽어서 검증
+  const cookieHeader = req.headers.cookie || '';
+  const cookieState = (cookieHeader.match(/(?:^|;\s*)oauth_state=([^;]+)/) || [])[1];
+  if (!state || (state !== lastState && state !== cookieState)) {
+    console.error("state 검증 실패", { state, lastState, cookieState });
+    return res.status(400).send("state 검증 실패");
+  }
 
   console.log("🔑 인증 코드 수신:", code);
 
@@ -340,7 +357,9 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       }),
     });
 
-    const tokenData = await tokenRes.json();
+    const tokenText = await tokenRes.text();
+    let tokenData;
+    try { tokenData = JSON.parse(tokenText); } catch { tokenData = { raw: tokenText }; }
 
     if (tokenData?.content?.accessToken) {
       console.log("✅ Access Token 발급 성공:", tokenData.content.accessToken);
@@ -364,7 +383,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       `);
     } else {
       console.log("❌ Access Token 발급 실패:", tokenData);
-      res.status(403).send(tokenData);
+      res.status(403).send(`<pre>${typeof tokenData === 'string' ? tokenData : JSON.stringify(tokenData, null, 2)}</pre>`);
     }
   } catch (err) {
     console.error("❌ 토큰 발급 오류:", err);
