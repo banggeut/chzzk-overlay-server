@@ -79,7 +79,7 @@ function renderMessageWithEmojis(text, emojis) {
         for (const code in emojiMap) {
             if (!Object.prototype.hasOwnProperty.call(emojiMap, code)) continue;
             const info = emojiMap[code];
-            const url = (info && (info.url || info.imageUrl || info.src)) || null;
+            const url = (typeof info === 'string') ? info : ((info && (info.url || info.imageUrl || info.src)) || null);
             if (!url) continue;
             // 토큰 형태 정확 매칭: {:code:} 와 :code:
             const tokens = [`{:${code}:}`, `:${code}:`];
