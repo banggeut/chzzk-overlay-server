@@ -95,7 +95,7 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독
+// ✅ 채팅 구독 (channelIds 배열로 수정)
 async function subscribeChatEvent(sessionKey) {
   try {
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
@@ -107,7 +107,7 @@ async function subscribeChatEvent(sessionKey) {
       },
       body: JSON.stringify({
         sessionKey,
-        channelId: [CHANNEL_ID],
+        channelIds: [CHANNEL_ID], // ✅ 수정됨
       }),
     });
 
@@ -140,9 +140,16 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
 
+  // ✅ SYSTEM 이벤트 시 구독 호출 1초 지연
   socket.on("SYSTEM", (data) => {
     console.log("🟢 시스템 이벤트:", data);
-    if (data?.data?.sessionKey) subscribeChatEvent(data.data.sessionKey);
+    if (data?.data?.sessionKey) {
+      const sessionKey = data.data.sessionKey;
+      console.log("⏳ 세션키 수신됨, 1초 후 채팅 구독 시도...");
+      setTimeout(() => {
+        subscribeChatEvent(sessionKey);
+      }, 1000); // ✅ 지연 추가
+    }
   });
 
   socket.on("CHAT", (data) => {
@@ -150,7 +157,6 @@ function connectChzzkSocketIO(sessionURL) {
       const chat = JSON.parse(data.bdy.chatMessage);
       const nickname = chat.profile?.nickname || "익명";
       const message = chat.msg || "";
-      // ✅ 이벤트명을 chatMessage로 변경
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
     } catch (err) {
