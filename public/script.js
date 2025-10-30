@@ -23,6 +23,7 @@ socket.on("viewerCount", (data) => {
 
 // [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)
 socket.on("chatMessage", (msg) => {
+    try { console.log("🧩 client emojis:", msg && msg.emojis); } catch {}
     addChatMessage(msg.nickname, renderMessageWithEmojis(msg.message, msg.emojis)); 
 });
 
@@ -72,17 +73,17 @@ function renderMessageWithEmojis(text, emojis) {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
-    if (!emojis || typeof emojis !== 'object') return safe;
+    const fallbackMap = { d_4: 'https://ssl.pstatic.net/static/nng/glive/icon/cha04.png' };
+    const emojiMap = (emojis && typeof emojis === 'object' && Object.keys(emojis).length > 0) ? emojis : fallbackMap;
     try {
-        for (const code in emojis) {
-            if (!Object.prototype.hasOwnProperty.call(emojis, code)) continue;
-            const info = emojis[code];
+        for (const code in emojiMap) {
+            if (!Object.prototype.hasOwnProperty.call(emojiMap, code)) continue;
+            const info = emojiMap[code];
             const url = (info && (info.url || info.imageUrl || info.src)) || null;
             if (!url) continue;
-            // 토큰 변형 케이스 지원: {:code:}, :code:
-            const variants = [code, `{:${code}:}`, `:${code}:`];
-            for (const token of variants) {
-                if (!token || token.length < 3) continue;
+            // 토큰 형태 정확 매칭: {:code:} 와 :code:
+            const tokens = [`{:${code}:}`, `:${code}:`];
+            for (const token of tokens) {
                 const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 safe = safe.replace(new RegExp(escaped, 'g'), `<img src="${url}" class="emoji" alt="${code}">`);
             }
