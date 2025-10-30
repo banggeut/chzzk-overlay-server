@@ -95,7 +95,7 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (channelIds 배열로 수정)
+// ✅ 채팅 구독 (channelId 단일 값으로 수정)
 async function subscribeChatEvent(sessionKey) {
   try {
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
@@ -107,7 +107,7 @@ async function subscribeChatEvent(sessionKey) {
       },
       body: JSON.stringify({
         sessionKey,
-        channelIds: [CHANNEL_ID], // ✅ 수정됨
+        channelId: CHANNEL_ID, // ✅ 문서 기준 단일 값
       }),
     });
 
@@ -148,15 +148,16 @@ function connectChzzkSocketIO(sessionURL) {
       console.log("⏳ 세션키 수신됨, 1초 후 채팅 구독 시도...");
       setTimeout(() => {
         subscribeChatEvent(sessionKey);
-      }, 1000); // ✅ 지연 추가
+      }, 1000);
     }
   });
 
+  // ✅ CHAT 이벤트 수신 (문서 기준 유지)
   socket.on("CHAT", (data) => {
     try {
       const chat = JSON.parse(data.bdy.chatMessage);
       const nickname = chat.profile?.nickname || "익명";
-      const message = chat.msg || "";
+      const message = chat.content || chat.msg || ""; // ✅ 필드 보강
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
     } catch (err) {
@@ -243,6 +244,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
           <p><strong>Access Token:</strong> ${tokenData.content.accessToken}</p>
           <p><strong>Refresh Token:</strong> ${tokenData.content.refreshToken}</p>
           <p>Render 환경변수에 추가하고 배포하면 됩니다.</p>
+          <p>⚠️ Access Token 발급 시 scope에 <strong>chat openid profile email</strong> 포함 필수</p>
         </body></html>
       `);
     } else {
