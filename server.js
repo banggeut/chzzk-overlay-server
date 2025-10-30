@@ -13,7 +13,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
+const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 본인 채널 ID로 교체
 
 let chzzkSocket = null;
 
@@ -95,7 +95,7 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (쿼리 파라미터 방식)
+// ✅ 채팅 구독 (channelId 포함)
 async function subscribeChatEvent(sessionKey) {
   try {
     console.log("📨 구독 요청 보냄:", { sessionKey });
@@ -109,6 +109,9 @@ async function subscribeChatEvent(sessionKey) {
           "Client-Id": CLIENT_ID,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          channelId: CHANNEL_ID, // ✅ 반드시 포함
+        }),
       }
     );
 
@@ -143,11 +146,10 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
 
-  // ✅ SYSTEM 이벤트 처리 (connected / subscribed 분리)
+  // ✅ SYSTEM 이벤트 처리
   socket.on("SYSTEM", (data) => {
     console.log("🟢 SYSTEM 이벤트 수신:", data);
 
-    // connected 이벤트 처리
     if (data?.type === "connected" && data?.data?.sessionKey) {
       const sessionKey = data.data.sessionKey;
       console.log("🔑 세션키 수신됨:", sessionKey);
@@ -157,7 +159,6 @@ function connectChzzkSocketIO(sessionURL) {
       }, 1000);
     }
 
-    // subscribed 이벤트 처리 (구독 완료 확인용)
     if (data?.type === "subscribed" && data?.data?.eventType === "CHAT") {
       console.log(`✅ CHAT 이벤트 구독 확인 완료 (채널: ${data.data.channelId})`);
     }
@@ -171,11 +172,9 @@ function connectChzzkSocketIO(sessionURL) {
       const emojis = data.emojis || {};
       const badges = data.profile?.badges || [];
 
-      // 💬 오버레이로 전송
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
 
-      // 🏷️ 추가 정보 (콘솔 디버깅용)
       if (Object.keys(emojis).length > 0) console.log("🧩 이모지:", emojis);
       if (badges.length > 0) console.log("🎖️ 뱃지:", badges);
     } catch (err) {
