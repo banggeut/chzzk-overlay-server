@@ -18,7 +18,8 @@ socket.on("connect", () => {
 
 // 실시간 시청자 수 업데이트
 socket.on("viewerCount", (data) => {
-    viewerCountEl.textContent = `👁️ ${data}`;
+    const text = (typeof data === 'number' && data > 0) ? data : '—';
+    viewerCountEl.textContent = `👁️ ${text}`;
 });
 
 // [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)

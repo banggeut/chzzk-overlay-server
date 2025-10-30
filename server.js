@@ -378,42 +378,23 @@ async function getViewerCount() {
           "Origin": "https://chzzk.naver.com",
           "Referer": "https://chzzk.naver.com/"
         };
-        // v2 먼저 시도
-        const v2Url = `https://api.chzzk.naver.com/service/v2/channels/${CHANNEL_ID}/live-status`;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 3000);
-            let res = await fetch(v2Url, { headers: commonHeaders, signal: controller.signal });
-            clearTimeout(timer);
-            let text = await res.text();
-            let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
-            const count = data?.content?.livePlayInfo?.concurrentUserCount ?? data?.content?.livePlayInfo?.viewerCount;
-            if (typeof count === 'number') {
-              console.log(`👁️ 시청자 수(v2): ${count}`);
-              io.emit("viewerCount", count);
-              return count;
-            }
-            console.log(`⚠️ v2 응답(${attempt}/3):`, data);
-          } catch (e) {
-            console.log(`⚠️ v2 시도 실패(${attempt}/3):`, e?.message || e);
-          }
-        }
-        // open API 백업
-        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers: { ...headers, ...commonHeaders } });
+        // 문서 기반 대안: 라이브 목록에서 내 채널을 필터링해 concurrentUserCount 사용
+        // GET /open/v1/lives (Client 인증만 필요) [docs]
+        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/lives?size=20`, { headers: { ...headers, ...commonHeaders } });
         let text = await res.text();
         let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
-        
-        if (data.code === 200 && data.content?.status === "OPEN" && data.content.liveViewerCount !== undefined) {
-            const count = data.content.liveViewerCount;
-            console.log(`👁️ 시청자 수: ${count}`);
-            io.emit("viewerCount", count); 
+        if (data && Array.isArray(data.data)) {
+          const match = data.data.find(item => item && item.channelId === CHANNEL_ID);
+          if (match && typeof match.concurrentUserCount === 'number') {
+            const count = match.concurrentUserCount;
+            console.log(`👁️ 시청자 수(lives): ${count}`);
+            io.emit("viewerCount", count);
             return count;
-        } else {
-            console.log("⚠️ 시청자 수 응답:", data);
-            io.emit("viewerCount", 0);
-            return 0;
+          }
         }
+        console.log("⚠️ 라이브 목록에서 채널을 찾지 못했거나 시청자 수 없음:", data && (data.data ? data.data.length : data));
+        io.emit("viewerCount", 0);
+        return 0;
     } catch (err) {
         console.error("❌ 시청자 수 조회 오류:", err);
         io.emit("viewerCount", 0);
