@@ -13,7 +13,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212"; // ✅ 채널 ID 추가
+const CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212"; // ✅ 채널 ID
 
 let chzzkSocket = null;
 
@@ -31,7 +31,7 @@ app.get("/", (req, res) => {
   else res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ✅ Access Token 갱신 (기존 동일)
+// ✅ Access Token 갱신
 async function refreshAccessToken() {
   console.log("🔄 Access Token 갱신 시도 중...");
   try {
@@ -95,7 +95,7 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 추가 (★ 새로 추가된 부분)
+// ✅ 채팅 구독
 async function subscribeChatEvent(sessionKey) {
   try {
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
@@ -122,7 +122,7 @@ async function subscribeChatEvent(sessionKey) {
   }
 }
 
-// ✅ 치지직 소켓 연결 (v2)
+// ✅ 치지직 소켓 연결
 function connectChzzkSocketIO(sessionURL) {
   console.log("🔗 치지직 소켓 연결 시도...");
   const [baseUrl, query] = sessionURL.split("?");
@@ -142,7 +142,6 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("SYSTEM", (data) => {
     console.log("🟢 시스템 이벤트:", data);
-    // ✅ 세션키가 감지되면 자동으로 채팅 구독 시도
     if (data?.data?.sessionKey) subscribeChatEvent(data.data.sessionKey);
   });
 
@@ -151,7 +150,8 @@ function connectChzzkSocketIO(sessionURL) {
       const chat = JSON.parse(data.bdy.chatMessage);
       const nickname = chat.profile?.nickname || "익명";
       const message = chat.msg || "";
-      io.emit("chat", { nickname, message });
+      // ✅ 이벤트명을 chatMessage로 변경
+      io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
     } catch (err) {
       console.error("❌ 채팅 파싱 오류:", err);
@@ -175,7 +175,7 @@ function connectChzzkSocketIO(sessionURL) {
   });
 }
 
-// ✅ 전체 연결 관리
+// ✅ 전체 연결
 async function startChatConnection() {
   console.log("--- 채팅 연결 전체 프로세스 시작 ---");
   if (!ACCESS_TOKEN || tokenExpired) {
@@ -200,7 +200,7 @@ async function startChatConnection() {
   }
 }
 
-// ✅ 인증 콜백 (기존 그대로 유지)
+// ✅ 인증 콜백
 app.get("/api/chzzk/auth/callback", async (req, res) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).send("인증 코드가 없습니다.");
@@ -254,10 +254,11 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   await startChatConnection();
 })();
 
-// ✅ 시청자 수 API (기존 유지)
+// ✅ 시청자 수 API
 app.get("/api/viewers", async (req, res) => {
   const { channelId } = req.query;
-  if (tokenExpired || !ACCESS_TOKEN) return res.json({ viewers: 0, error: "Token Expired or Missing" });
+  if (tokenExpired || !ACCESS_TOKEN)
+    return res.json({ viewers: 0, error: "Token Expired or Missing" });
 
   try {
     const response = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${channelId}/viewers`, {
