@@ -14,7 +14,7 @@ let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
-const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 본인의 채널 ID로 교체 필요!
+const CHANNEL_ID = process.env.CHZZK_CHANNEL_ID || "";
 
 let chzzkSocket = null;
 
@@ -31,8 +31,18 @@ app.use(express.static(path.join(__dirname, "public")));
 const TOKENS_FILE_PATH = path.join(__dirname, "chzzk_tokens.json");
 
 app.get("/", (req, res) => {
-  if (tokenExpired) res.sendFile(path.join(__dirname, "public", "expired.html"));
+  if (tokenExpired || !REFRESH_TOKEN) res.sendFile(path.join(__dirname, "public", "expired.html"));
   else res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ✅ 로그인 URL 동적 생성 라우트
+let lastState = "";
+app.get("/login", (req, res) => {
+  const redirectUri = `${req.protocol}://${req.get("host")}/api/chzzk/auth/callback`;
+  lastState = Math.random().toString(36).slice(2);
+  const authUrl = `https://chzzk.naver.com/account-interlock?clientId=${encodeURIComponent(CLIENT_ID)}&redirectUri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(lastState)}`;
+  if (!CLIENT_ID) return res.status(500).send("CLIENT_ID 미설정");
+  res.redirect(authUrl);
 });
 
 // ⭐ [새로 추가] 토큰을 파일에 저장하는 함수 ⭐
@@ -105,6 +115,7 @@ async function createSession() {
     return null;
   }
   try {
+    console.log("📡 세션 생성 요청 시작");
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/auth", {
       method: "GET",
       headers: {
@@ -113,7 +124,9 @@ async function createSession() {
       },
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
     if (data.code === 200 && data?.content?.url) {
       console.log("✅ 세션 URL 획득:", data.content.url);
       return data.content.url;
@@ -145,7 +158,9 @@ async function subscribeChatEvent(sessionKey) {
       }
     );
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
     console.log("📨 구독 응답 전체:", data);
 
     if (data.code === 200) {
@@ -308,6 +323,7 @@ async function startViewerCountUpdate() {
 app.get("/api/chzzk/auth/callback", async (req, res) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).send("인증 코드가 없습니다.");
+  if (!state || state !== lastState) return res.status(400).send("state 검증 실패");
 
   console.log("🔑 인증 코드 수신:", code);
 
@@ -342,8 +358,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
         <html><head><meta charset="utf-8"/></head>
         <body style="font-family:sans-serif;text-align:center;margin-top:50px;">
           <h2>✅ 치지직 Access Token 발급 완료!</h2>
-          <p>새 토큰이 서버에 저장되었습니다. 이제 Render 서비스의 **[Manual Deploy] 버튼**을 눌러 수동 재배포를 진행해 주세요!</p>
-          <p>Render는 컨테이너를 새로 생성해야 저장된 토큰 파일을 인식할 수 있습니다.</p>
+          <p>이 창을 닫고 OBS 오버레이를 새로고침하세요.</p>
           <p>⚠️ Access Token 발급 시 scope에 <strong>chat openid profile email</strong> 포함 필수</p>
         </body></html>
       `);
