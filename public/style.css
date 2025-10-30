@@ -173,6 +173,13 @@ body {
     word-break: break-all;
 }
 
+/* 이모지 이미지 스타일 */
+.emoji {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+}
+
 
 /* ==================================== */
 /* 5. 애니메이션 스타일 (크기 유지) */

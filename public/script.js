@@ -23,8 +23,7 @@ socket.on("viewerCount", (data) => {
 
 // [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)
 socket.on("chatMessage", (msg) => {
-    // server.js에서 보내는 데이터 구조에 맞게 'content'가 아닌 'message'를 사용합니다.
-    addChatMessage(msg.nickname, msg.message); 
+    addChatMessage(msg.nickname, renderMessageWithEmojis(msg.message, msg.emojis)); 
 });
 
 // 에러 및 연결 종료 처리
@@ -33,14 +32,21 @@ socket.on("disconnect", () => {
 });
 
 // ✅ 채팅 메시지 DOM에 추가
-function addChatMessage(username, text) {
+function addChatMessage(username, html) {
+    const profiles = [
+        'default_profile.png',
+        'default_profile2.png',
+        'default_profile3.png',
+        'default_profile4.png'
+    ];
+    const profileSrc = profiles[Math.floor(Math.random() * profiles.length)];
     const messageItem = document.createElement('div');
     messageItem.classList.add('chat-message-item');
     messageItem.innerHTML = `
-        <img src="default_profile.png" class="chat-profile-img" alt="Profile">
+        <img src="${profileSrc}" class="chat-profile-img" alt="Profile">
         <div class="chat-text-container">
             <span class="chat-username">${username}</span>
-            <span class="chat-text">${text}</span>
+            <span class="chat-text">${html}</span>
         </div>
     `;
     chatMessages.appendChild(messageItem);
@@ -56,6 +62,33 @@ function addChatMessage(username, text) {
 
     // 스크롤을 맨 아래로 이동 (가장 최근 메시지 표시)
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// 이모지 렌더링: {:code:} 형태 토큰을 이미지로 치환
+function renderMessageWithEmojis(text, emojis) {
+    if (!text) return "";
+    // 기본 이스케이프
+    let safe = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    if (!emojis || typeof emojis !== 'object') return safe;
+    try {
+        for (const code in emojis) {
+            if (!Object.prototype.hasOwnProperty.call(emojis, code)) continue;
+            const info = emojis[code];
+            const url = (info && (info.url || info.imageUrl || info.src)) || null;
+            if (!url) continue;
+            // 토큰 변형 케이스 지원: {:code:}, :code:
+            const variants = [code, `{:${code}:}`, `:${code}:`];
+            for (const token of variants) {
+                if (!token || token.length < 3) continue;
+                const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                safe = safe.replace(new RegExp(escaped, 'g'), `<img src="${url}" class="emoji" alt="${code}">`);
+            }
+        }
+    } catch {}
+    return safe;
 }
 
 // ❤️ 채팅 효과 (Instagram Live 스타일 복구)

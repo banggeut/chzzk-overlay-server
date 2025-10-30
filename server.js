@@ -250,7 +250,7 @@ function connectChzzkSocketIO(sessionURL) {
       const badges = chatData.profile?.badges || [];
 
       // 💬 오버레이 클라이언트로 전송 (이벤트 이름: chatMessage)
-      io.emit("chatMessage", { nickname, message });
+      io.emit("chatMessage", { nickname, message, emojis });
       console.log("💬", nickname + ":", message);
 
       if (Object.keys(emojis).length > 0) console.log("🧩 이모지:", emojis);
@@ -327,12 +327,11 @@ async function startChatConnection() {
 // ⭐ 시청자 수 가져오기 및 클라이언트에게 전송
 async function getViewerCount() {
     try {
-        const res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, {
-            headers: {
-                "Client-Id": CLIENT_ID,
-            },
-        });
-        const data = await res.json();
+        const headers = { "Client-Id": CLIENT_ID };
+        if (ACCESS_TOKEN) headers["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
+        const res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers });
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
         
         if (data.code === 200 && data.content?.status === "OPEN" && data.content.liveViewerCount !== undefined) {
             const count = data.content.liveViewerCount;
@@ -340,6 +339,7 @@ async function getViewerCount() {
             io.emit("viewerCount", count); 
             return count;
         } else {
+            console.log("⚠️ 시청자 수 응답:", data);
             io.emit("viewerCount", 0);
             return 0;
         }
