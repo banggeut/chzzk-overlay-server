@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: chzzk-overlay-server
+    env: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    envVars:
+      - key: CHZZK_CLIENT_ID
+        sync: false
+      - key: CHZZK_CLIENT_SECRET
+        sync: false
