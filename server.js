@@ -37,6 +37,33 @@ app.get("/", (req, res) => {
   else res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// 이모티콘 평탄화: 다양한 구조를 code -> url 맵으로 변환
+function normalizeEmojis(raw) {
+  if (!raw) return {};
+  const map = {};
+  try {
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const code = item?.code || item?.key || item?.name;
+        const url = item?.url || item?.imageUrl || item?.src || item?.images?.small || item?.images?.default;
+        if (code && typeof url === 'string') map[code] = url;
+      }
+    } else if (typeof raw === 'object') {
+      for (const code of Object.keys(raw)) {
+        const v = raw[code];
+        let url = v?.url || v?.imageUrl || v?.src;
+        if (!url && v && typeof v === 'object') {
+          for (const k of Object.keys(v)) {
+            if (typeof v[k] === 'string' && /^https?:\/\//.test(v[k])) { url = v[k]; break; }
+          }
+        }
+        if (typeof url === 'string') map[code] = url;
+      }
+    }
+  } catch {}
+  return map;
+}
+
 // ✅ 로그인 URL 동적 생성 라우트
 let lastState = "";
 app.get("/login", (req, res) => {
@@ -246,7 +273,7 @@ function connectChzzkSocketIO(sessionURL) {
       }
       const nickname = chatData.profile?.nickname || "익명";
       const message = chatData.content || chatData.msg || ""; 
-      const emojis = chatData.emojis || {};
+      const emojis = normalizeEmojis(chatData.emojis);
       const badges = chatData.profile?.badges || [];
 
       // 💬 오버레이 클라이언트로 전송 (이벤트 이름: chatMessage)
@@ -329,8 +356,8 @@ async function getViewerCount() {
     try {
         const headers = { "Client-Id": CLIENT_ID };
         if (ACCESS_TOKEN) headers["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
-        const res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers });
-        const text = await res.text();
+        let res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, { headers });
+        let text = await res.text();
         let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
         
         if (data.code === 200 && data.content?.status === "OPEN" && data.content.liveViewerCount !== undefined) {
@@ -340,6 +367,20 @@ async function getViewerCount() {
             return count;
         } else {
             console.log("⚠️ 시청자 수 응답:", data);
+            // 대체 엔드포인트 시도 (서비스 v2)
+            try {
+              res = await fetch(`https://api.chzzk.naver.com/service/v2/channels/${CHANNEL_ID}/live-status`);
+              text = await res.text();
+              try { data = JSON.parse(text); } catch { data = { raw: text }; }
+              const count = data?.content?.livePlayInfo?.concurrentUserCount ?? data?.content?.livePlayInfo?.viewerCount;
+              if (typeof count === 'number') {
+                console.log(`👁️ 시청자 수(v2): ${count}`);
+                io.emit("viewerCount", count);
+                return count;
+              }
+            } catch (e) {
+              console.log("⚠️ v2 시청자 수 조회 실패:", e?.message || e);
+            }
             io.emit("viewerCount", 0);
             return 0;
         }
