@@ -11,7 +11,6 @@ const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
 let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
-
 let tokenExpired = false;
 
 const app = express();
@@ -19,7 +18,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer);
 app.use(express.json());
 
-// 경로 설정
+// 폴더 경로 설정
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
@@ -47,6 +46,7 @@ async function refreshAccessToken() {
         clientSecret: CLIENT_SECRET,
       }),
     });
+
     const data = await res.json();
     if (data?.content?.accessToken) {
       ACCESS_TOKEN = data.content.accessToken;
@@ -92,14 +92,18 @@ async function createSession() {
 }
 
 
-// ✅ Socket.IO v2 연결 (치지직 공식 프로토콜 호환)
+// ✅ Socket.IO v2.0.3 연결 (치지직 공식 프로토콜 호환)
 function connectChzzkSocketIO(sessionURL) {
   console.log("🔗 치지직 Socket.IO 연결 시도...");
 
-  const socket = ioClient(sessionURL, {
+  const [baseUrl, query] = sessionURL.split("?");
+  const authToken = new URLSearchParams(query).get("auth");
+
+  const socket = ioClient(baseUrl, {
     transports: ["websocket"],
     reconnection: false,
-    timeout: 3000,
+    timeout: 5000,
+    query: { auth: authToken },
   });
 
   socket.on("connect", () => {
