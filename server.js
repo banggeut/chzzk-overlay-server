@@ -95,11 +95,12 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독
+// ✅ 채팅 구독 (채널 ID 필수 포함)
 async function subscribeChatEvent(sessionKey) {
   try {
-    console.log("📨 구독 요청 보냄:", { sessionKey });
+    console.log("📨 구독 요청 보냄:", { sessionKey, channelId: CHANNEL_ID });
 
+    // ⭐ [수정 반영] 구독 요청 URL에 &channelId=${CHANNEL_ID}를 명시적으로 추가 ⭐
     const res = await fetch(
       `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}&channelId=${CHANNEL_ID}`,
       {
@@ -118,7 +119,8 @@ async function subscribeChatEvent(sessionKey) {
     if (data.code === 200) {
       console.log(`✅ 채팅 이벤트 구독 요청 성공 (${CHANNEL_ID})`);
     } else {
-      console.error("❌ 채팅 이벤트 구독 실패:", data);
+      // ⚠️ 구독 실패 시 로그 출력 강화
+      console.error(`❌ 채팅 이벤트 구독 실패 (코드: ${data.code}):`, data);
     }
   } catch (err) {
     console.error("❌ 채팅 구독 요청 오류:", err);
@@ -133,10 +135,10 @@ function connectChzzkSocketIO(sessionURL) {
 
   if (chzzkSocket) chzzkSocket.disconnect();
 
-  // ⭐ Socket.IO v2.x 문법 및 Gist에 제시된 옵션으로 수정 ⭐
+  // ⭐ Socket.IO v2.x 문법 및 Gist에 제시된 옵션 적용 ⭐
   const socket = ioClient(baseUrl, {
     transports: ["websocket"],
-    reconnection: false, // 재접속은 수동으로 처리하도록 off
+    reconnection: false, 
     forceNew: true, 
     timeout: 5000,
     query: { auth: authToken },
@@ -145,13 +147,12 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
 
-  // ✅ SYSTEM 이벤트 처리 (connected / subscribed 분리)
+  // ✅ SYSTEM 이벤트 처리
   socket.on("SYSTEM", (data) => {
-    // data는 Array가 아닌 단일 JSON 객체로 수신됩니다. (ioClient v2.x)
     const systemData = data;
     console.log("🟢 SYSTEM 이벤트 수신:", systemData);
 
-    // connected 이벤트 처리
+    // connected 이벤트 처리: 세션 키 수신 후 1초 뒤 구독 요청
     if (systemData?.type === "connected" && systemData?.data?.sessionKey) {
       const sessionKey = systemData.data.sessionKey;
       console.log("🔑 세션키 수신됨:", sessionKey);
@@ -170,19 +171,16 @@ function connectChzzkSocketIO(sessionURL) {
   // ✅ CHAT 이벤트 수신
   socket.on("CHAT", (data) => {
     try {
-      // data는 Array가 아닌 단일 JSON 객체로 수신됩니다.
       const chatData = data;
       const nickname = chatData.profile?.nickname || "익명";
-      // content 필드를 사용합니다. (Gist 참고)
       const message = chatData.content || chatData.msg || ""; 
       const emojis = chatData.emojis || {};
       const badges = chatData.profile?.badges || [];
 
-      // 💬 오버레이로 전송 (이벤트 이름: chatMessage)
+      // 💬 오버레이 클라이언트로 전송 (이벤트 이름: chatMessage)
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
 
-      // 🏷️ 추가 정보 (콘솔 디버깅용)
       if (Object.keys(emojis).length > 0) console.log("🧩 이모지:", emojis);
       if (badges.length > 0) console.log("🎖️ 뱃지:", badges);
     } catch (err) {
@@ -192,7 +190,6 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect_error", (err) => {
     console.error("❌ 소켓 연결 오류:", err.message || err);
-    // 토큰 오류가 발생하면 연결을 끊고 재시도
     if (err.message && (err.message.includes("401") || err.message.includes("INVALID_TOKEN"))) {
       chzzkSocket.disconnect();
       console.log("토큰 오류 발생. 5초 후 채팅 연결 재시도...");
@@ -208,7 +205,7 @@ function connectChzzkSocketIO(sessionURL) {
     }
   });
 
-  // ⭐ Gist에서 제시된 테스트 코드처럼 connect()를 명시적으로 호출 ⭐
+  // Gist에서 제시된 테스트 코드처럼 connect()를 명시적으로 호출
   socket.connect();
 }
 
@@ -241,7 +238,6 @@ async function startChatConnection() {
 // ⭐ 시청자 수 가져오기 및 클라이언트에게 전송
 async function getViewerCount() {
     try {
-        // 치지직 API를 사용하여 시청자 수를 조회
         const res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, {
             headers: {
                 "Client-Id": CLIENT_ID,
@@ -252,7 +248,6 @@ async function getViewerCount() {
         if (data.code === 200 && data.content?.status === "OPEN" && data.content.liveViewerCount !== undefined) {
             const count = data.content.liveViewerCount;
             console.log(`👁️ 시청자 수: ${count}`);
-            // 모든 연결된 오버레이 클라이언트에게 시청자 수 전송
             io.emit("viewerCount", count); 
             return count;
         } else {
@@ -271,7 +266,6 @@ async function getViewerCount() {
 async function startViewerCountUpdate() {
     console.log("🔄 시청자 수 업데이트 타이머 시작 (30초 간격)");
     await getViewerCount(); // 서버 시작 시 즉시 1회 실행
-    // 30초마다 시청자 수 업데이트
     setInterval(getViewerCount, 30000); 
 }
 
