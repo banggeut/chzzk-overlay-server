@@ -95,20 +95,23 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (channelId 제거 완료)
+// ✅ 채팅 구독 (쿼리 파라미터 방식으로 수정됨)
 async function subscribeChatEvent(sessionKey) {
   try {
     console.log("📨 구독 요청 보냄:", { sessionKey });
 
-    const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "Client-Id": CLIENT_ID,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ sessionKey }),
-    });
+    // ✅ Gist 기준: sessionKey를 쿼리 파라미터로 전달해야 실제 구독 처리됨
+    const res = await fetch(
+      `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          "Client-Id": CLIENT_ID,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     const data = await res.json();
     console.log("📨 구독 응답 전체:", data);
