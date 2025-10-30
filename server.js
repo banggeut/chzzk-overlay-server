@@ -275,12 +275,16 @@ function connectChzzkSocketIO(sessionURL) {
     }
   });
 
-  // 모든 이벤트 로깅(이름 파악용)
-  socket.onAny((event, payload) => {
-    if (event !== 'SYSTEM' && event !== 'CHAT') {
-      console.log("🔔 기타 이벤트:", event, typeof payload === 'object' ? JSON.stringify(payload) : payload);
-    }
-  });
+  // 모든 이벤트 로깅(이름 파악용) - v2에서는 onAny 미지원
+  if (typeof socket.onAny === 'function') {
+    socket.onAny((event, payload) => {
+      if (event !== 'SYSTEM' && event !== 'CHAT') {
+        console.log("🔔 기타 이벤트:", event, typeof payload === 'object' ? JSON.stringify(payload) : payload);
+      }
+    });
+  } else {
+    console.log("ℹ️ socket.io-client v2: onAny 미지원, 기본 이벤트만 로깅합니다");
+  }
 
   socket.on("connect_error", (err) => {
     console.error("❌ 소켓 연결 오류:", err.message || err);
