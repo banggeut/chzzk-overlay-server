@@ -11,7 +11,7 @@ const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
 let ACCESS_TOKEN = process.env.CHZZK_ACCESS_TOKEN;
 let REFRESH_TOKEN = process.env.CHZZK_REFRESH_TOKEN;
 const PORT = process.env.PORT || 10000;
-let tokenExpired = false; // 🔸 토큰 만료 상태 플래그
+let tokenExpired = false;
 
 const app = express();
 const server = createServer(app);
@@ -30,9 +30,6 @@ app.get("/", (req, res) => {
   }
 });
 
-// -------------------------------
-// Access Token 갱신
-// -------------------------------
 async function refreshAccessToken() {
   console.log("🔄 Access Token 갱신 시도 중...");
   try {
@@ -68,9 +65,6 @@ async function refreshAccessToken() {
 
 setInterval(refreshAccessToken, 1000 * 60 * 60 * 20);
 
-// -------------------------------
-// 치지직 세션 생성
-// -------------------------------
 async function createSession() {
   try {
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/auth/client", {
@@ -93,9 +87,6 @@ async function createSession() {
   return null;
 }
 
-// -------------------------------
-// WebSocket 연결 (자동 복구 포함)
-// -------------------------------
 async function connectChzzkSocket() {
   console.log("🔗 치지직 WebSocket 연결 시도...");
   const sessionURL = await createSession();
@@ -156,7 +147,7 @@ async function connectChzzkSocket() {
   });
 
   ws.on("close", (code, reason) => {
-    console.warn(⚠️ 소켓 연결 종료 (${code}): ${reason}`);
+    console.warn(`⚠️ 소켓 연결 종료 (${code}): ${reason}`);
     console.log("⏳ 5초 후 재연결 시도...");
     setTimeout(connectChzzkSocket, 5000);
   });
@@ -164,17 +155,11 @@ async function connectChzzkSocket() {
 
 connectChzzkSocket();
 
-// -------------------------------
-// Socket.IO 연결 (오버레이)
-// -------------------------------
 io.on("connection", (socket) => {
   console.log("🟢 오버레이 클라이언트 연결:", socket.id);
   socket.on("disconnect", () => console.log("🔴 클라이언트 종료:", socket.id));
 });
 
-// -------------------------------
-// 시청자 수 API
-// -------------------------------
 app.get("/api/viewers", async (req, res) => {
   const { channelId } = req.query;
   try {
