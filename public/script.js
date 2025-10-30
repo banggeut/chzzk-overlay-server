@@ -1,8 +1,5 @@
-// ✅ 실제 치지직 채널 ID 입력
-const channelId = "72540e0952096b201da89e667b70398b";
-
-// ✅ 배포된 서버 주소
-const serverUrl = "https://chzzk-overlay-server.onrender.com";
+// ✅ 서버 주소 (배포/로컬 모두 자동 인식)
+const serverUrl = window.location.origin;
 
 // HTML 요소 연결
 const chatMessages = document.getElementById("chatMessages");
@@ -69,8 +66,8 @@ function createHeart() {
     const heart = document.createElement('img');
     heart.className = 'heart-icon'; // style.css에서 정의한 애니메이션 클래스 사용
     
-    // ⭐ 하트 이미지 리스트 (필요 시 웹 경로로 변경 필수) ⭐
-    const heartImages = ['heart_red.png', 'heart_pink.png', 'heart_yellow.png', 'heart_purple.png'];
+    // ⭐ 하트 이미지 리스트 (존재하는 파일만 사용) ⭐
+    const heartImages = ['heart_red.png'];
     const randomImage = heartImages[Math.floor(Math.random() * heartImages.length)];
     
     // 주의: 이 파일들도 OBS에서 보이려면 웹 접근 가능한 URL이어야 합니다.
