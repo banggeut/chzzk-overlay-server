@@ -95,12 +95,11 @@ async function createSession() {
   return null;
 }
 
-// ✅ 채팅 구독 (쿼리 파라미터 방식으로 수정됨)
+// ✅ 채팅 구독 (쿼리 파라미터 방식)
 async function subscribeChatEvent(sessionKey) {
   try {
     console.log("📨 구독 요청 보냄:", { sessionKey });
 
-    // ✅ Gist 기준: sessionKey를 쿼리 파라미터로 전달해야 실제 구독 처리됨
     const res = await fetch(
       `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`,
       {
@@ -117,7 +116,7 @@ async function subscribeChatEvent(sessionKey) {
     console.log("📨 구독 응답 전체:", data);
 
     if (data.code === 200) {
-      console.log(`✅ 채팅 이벤트 구독 성공 (${CHANNEL_ID})`);
+      console.log(`✅ 채팅 이벤트 구독 요청 성공 (${CHANNEL_ID})`);
     } else {
       console.error("❌ 채팅 이벤트 구독 실패:", data);
     }
@@ -144,25 +143,41 @@ function connectChzzkSocketIO(sessionURL) {
 
   socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
 
-  // ✅ SYSTEM 이벤트 시 구독 호출
+  // ✅ SYSTEM 이벤트 처리 (connected / subscribed 분리)
   socket.on("SYSTEM", (data) => {
-    console.log("🟢 시스템 이벤트:", data);
-    if (data?.data?.sessionKey) {
+    console.log("🟢 SYSTEM 이벤트 수신:", data);
+
+    // connected 이벤트 처리
+    if (data?.type === "connected" && data?.data?.sessionKey) {
       const sessionKey = data.data.sessionKey;
-      console.log("⏳ 세션키 수신됨, 1초 후 채팅 구독 시도...");
+      console.log("🔑 세션키 수신됨:", sessionKey);
+      console.log("⏳ 1초 후 채팅 구독 시도...");
       setTimeout(() => {
         subscribeChatEvent(sessionKey);
       }, 1000);
     }
+
+    // subscribed 이벤트 처리 (구독 완료 확인용)
+    if (data?.type === "subscribed" && data?.data?.eventType === "CHAT") {
+      console.log(`✅ CHAT 이벤트 구독 확인 완료 (채널: ${data.data.channelId})`);
+    }
   });
 
-  // ✅ CHAT 이벤트 수신 (JSON.parse 제거됨)
+  // ✅ CHAT 이벤트 수신
   socket.on("CHAT", (data) => {
     try {
       const nickname = data.profile?.nickname || "익명";
       const message = data.content || data.msg || "";
+      const emojis = data.emojis || {};
+      const badges = data.profile?.badges || [];
+
+      // 💬 오버레이로 전송
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
+
+      // 🏷️ 추가 정보 (콘솔 디버깅용)
+      if (Object.keys(emojis).length > 0) console.log("🧩 이모지:", emojis);
+      if (badges.length > 0) console.log("🎖️ 뱃지:", badges);
     } catch (err) {
       console.error("❌ 채팅 파싱 오류:", err);
     }
