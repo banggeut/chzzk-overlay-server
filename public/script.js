@@ -1,48 +1,41 @@
+// ✅ 실제 치지직 채널 ID 입력
 const channelId = "f00f6d46ecc6d735b96ecf376b9e5212";
+
+// ✅ 배포된 서버 주소
 const serverUrl = "https://chzzk-overlay-server.onrender.com";
 
+// HTML 요소 연결
 const chatMessages = document.getElementById("chatMessages");
 const viewerCountEl = document.getElementById("viewerCount");
-const emptyHeartIcon = document.getElementById("emptyHeartIcon");
 
-const maxChatMessages = 5;
+// ✅ Socket.IO로 서버와 연결
+const socket = io(serverUrl, {
+    transports: ["websocket"]
+});
 
-// 시청자 수 실시간 갱신
-async function fetchViewerCount() {
-    try {
-        const res = await fetch(`${serverUrl}/api/viewers?channelId=${channelId}`);
-        const data = await res.json();
-        viewerCountEl.textContent = `👁️ ${data.viewers || 0}`;
-    } catch (err) {
-        console.error("Viewer fetch error:", err);
-    }
-}
+// 서버 연결 성공 시
+socket.on("connect", () => {
+    console.log("🟢 오버레이 서버 연결됨:", socket.id);
+    // 서버로 현재 채널 구독 요청
+    socket.emit("joinChannel", { channelId });
+});
 
-// 실시간 채팅 수신
-async function connectChat() {
-    const wsUrl = `${serverUrl.replace("https", "wss")}/ws/chat/${channelId}`;
-    const ws = new WebSocket(wsUrl);
+// 실시간 시청자 수 업데이트
+socket.on("viewerCount", (data) => {
+    viewerCountEl.textContent = `👁️ ${data}`;
+});
 
-    ws.onopen = () => console.log("✅ 치지직 오버레이 WebSocket 연결됨");
+// 실시간 채팅 메시지 수신
+socket.on("chatMessage", (msg) => {
+    addChatMessage(msg.nickname, msg.message);
+});
 
-    ws.onmessage = (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            if (!msg.nickname || !msg.message) return;
+// 에러 및 연결 종료 처리
+socket.on("disconnect", () => {
+    console.log("🔴 서버 연결 끊김, 재연결 시도 중...");
+});
 
-            addChatMessage(msg.nickname, msg.message);
-        } catch (e) {
-            console.error("메시지 파싱 오류:", e);
-        }
-    };
-
-    ws.onclose = () => {
-        console.warn("⚠️ 연결 종료됨, 3초 후 재연결 시도...");
-        setTimeout(connectChat, 3000);
-    };
-}
-
-// 채팅 메시지 DOM 추가
+// ✅ 채팅 메시지 DOM에 추가
 function addChatMessage(username, text) {
     const messageItem = document.createElement('div');
     messageItem.classList.add('chat-message-item');
@@ -57,7 +50,8 @@ function addChatMessage(username, text) {
 
     createHeart();
 
-    if (chatMessages.children.length > maxChatMessages) {
+    // 오래된 채팅 자동 제거 (최대 5개 유지)
+    if (chatMessages.children.length > 5) {
         const oldest = chatMessages.firstElementChild;
         oldest.classList.add('fade-out');
         oldest.addEventListener('animationend', () => oldest.remove(), { once: true });
@@ -66,32 +60,23 @@ function addChatMessage(username, text) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// 하트 생성 애니메이션 (원본 그대로)
+// ❤️ 채팅 효과 (기존 디자인 유지)
 function createHeart() {
-    const rect = emptyHeartIcon.getBoundingClientRect();
-    const heartIcon = document.createElement('img');
-    heartIcon.src = 'heart_red.png';
-    heartIcon.classList.add('heart-icon');
-    document.body.appendChild(heartIcon);
+    const heart = document.createElement('div');
+    heart.className = 'heart';
+    heart.textContent = '❤';
+    document.body.appendChild(heart);
 
-    heartIcon.style.left = `${rect.left + rect.width / 2 - heartIcon.offsetWidth / 2}px`;
-    heartIcon.style.bottom = `${window.innerHeight - rect.bottom}px`;
+    const startX = Math.random() * window.innerWidth;
+    heart.style.left = `${startX}px`;
 
-    heartIcon.addEventListener('animationend', () => heartIcon.remove());
+    const animation = heart.animate([
+        { transform: 'translateY(0)', opacity: 1 },
+        { transform: 'translateY(-200px)', opacity: 0 }
+    ], {
+        duration: 1500,
+        easing: 'ease-out'
+    });
+
+    animation.onfinish = () => heart.remove();
 }
-
-// 하트 위치 보정
-function adjustHeartContainerPosition() {
-    const rect = emptyHeartIcon.getBoundingClientRect();
-    const heartContainer = document.getElementById('heartContainer');
-    heartContainer.style.bottom = `${window.innerHeight - rect.bottom}px`;
-    heartContainer.style.right = `${window.innerWidth - rect.right}px`;
-}
-
-window.addEventListener('load', adjustHeartContainerPosition);
-window.addEventListener('resize', adjustHeartContainerPosition);
-
-// 초기 실행
-fetchViewerCount();
-setInterval(fetchViewerCount, 10000);
-connectChat();
