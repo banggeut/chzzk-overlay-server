@@ -15,6 +15,9 @@ const PORT = process.env.PORT || 10000;
 let tokenExpired = false;
 const CHANNEL_ID = "72540e0952096b201da89e667b70398b"; // ✅ 테스트용 채널 ID (본인 채널로 교체 필요)
 
+// ✅ 추가: 실제 CHAT 수신 여부 플래그
+let chatReceived = false;
+
 let chzzkSocket = null;
 
 const app = express();
@@ -156,6 +159,9 @@ function connectChzzkSocketIO(sessionURL) {
   // ✅ CHAT 이벤트 수신 (JSON.parse 제거됨)
   socket.on("CHAT", (data) => {
     try {
+      // ✅ 실제 채팅 수신됨 플래그
+      chatReceived = true;
+
       const nickname = data.profile?.nickname || "익명";
       const message = data.content || data.msg || "";
       io.emit("chatMessage", { nickname, message });
@@ -174,7 +180,7 @@ function connectChzzkSocketIO(sessionURL) {
   });
 
   socket.on("disconnect", (reason) => {
-    console.warn("⚠️ 소켓 종료:", reason);
+    console.warn(⚠️ 소켓 종료:", reason);
     if (reason !== "io client disconnect") {
       console.log("5초 후 연결 재시도...");
       setTimeout(startChatConnection, 5000);
@@ -267,6 +273,27 @@ io.on("connection", (socket) => {
   console.log("🟢 오버레이 클라이언트 연결:", socket.id);
   socket.on("disconnect", () => console.log("🔴 클라이언트 종료:", socket.id));
 });
+
+// ✅ 추가: 방송 꺼짐 대비 테스트 채팅 자동 전송 (10초 후 3회)
+function scheduleTestChatsIfNoLive() {
+  setTimeout(() => {
+    if (!chatReceived) {
+      const tests = [
+        { nickname: "테스트봇", message: "💬 방송 없이도 출력되는지 테스트 1" },
+        { nickname: "테스트봇", message: "💬 테스트 2" },
+        { nickname: "테스트봇", message: "💬 테스트 3" },
+      ];
+      console.log("🎨 실채팅 수신 없음 → 테스트 메시지 전송 시작");
+      tests.forEach((t, i) =>
+        setTimeout(() => {
+          io.emit("chatMessage", t);
+          console.log("💬 테스트:", `${t.nickname}: ${t.message}`);
+        }, i * 1500)
+      );
+    }
+  }, 10000);
+}
+scheduleTestChatsIfNoLive();
 
 // ✅ 서버 시작
 httpServer.listen(PORT, () => console.log(`✅ 서버 실행 중: 포트 ${PORT}`));
