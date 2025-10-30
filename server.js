@@ -92,7 +92,7 @@ async function subscribeChatEvent(sessionKey) {
                 "Client-Id": CLIENT_ID,
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ sessionKey }), // ⚠️ 문서 기준: sessionKey만
+            body: JSON.stringify({ sessionKey }),
         });
 
         const raw = await res.text();
@@ -109,7 +109,7 @@ async function subscribeChatEvent(sessionKey) {
 }
 
 // ==============================
-// CHZZK WebSocket 연결 (Socket.IO 2.x 방식)
+// CHZZK WebSocket 연결 (Socket.IO 2.x 호환)
 // ==============================
 function connectChzzkSocketIO(sessionURL) {
     console.log("--- 채팅 연결 전체 프로세스 시작 ---");
@@ -120,7 +120,6 @@ function connectChzzkSocketIO(sessionURL) {
         timeout: 5000,
     });
 
-    // [ADD] 모든 이벤트 로깅
     if (DEBUG_CHZZK && typeof socket.onAny === "function") {
         socket.onAny((event, payload) => {
             try {
@@ -132,12 +131,10 @@ function connectChzzkSocketIO(sessionURL) {
         });
     }
 
-    // [SYSTEM 이벤트]
     socket.on("SYSTEM", (data) => {
         console.log("🟢 SYSTEM 이벤트 수신:", data);
         if (data?.data?.sessionKey) lastSystemSessionKey = data.data.sessionKey;
 
-        // 5초 후에도 CHAT 미수신 시 재구독 시도
         setTimeout(() => {
             if (!lastChatAt && lastSystemSessionKey) {
                 console.warn("⏳ CHAT 미수신 -> 재구독 시도");
@@ -146,7 +143,6 @@ function connectChzzkSocketIO(sessionURL) {
         }, 5000);
     });
 
-    // [CHAT 이벤트]
     socket.on("CHAT", (data) => {
         try {
             lastChatAt = Date.now();
@@ -168,7 +164,6 @@ function connectChzzkSocketIO(sessionURL) {
             }
 
             console.log("💬", nickname + ":", message);
-
             io.emit("chatMessage", { nickname, message });
             io.emit("chat", { nickname, message });
 
@@ -177,13 +172,58 @@ function connectChzzkSocketIO(sessionURL) {
         }
     });
 
-    // [연결 완료]
     socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
     socket.on("disconnect", () => console.warn("⚠️ 소켓 연결 종료됨. 재시도 예정."));
 }
 
 // ==============================
-// 시청자 수 API (테스트용)
+// ✅ OAuth 콜백 라우트 (토큰 발급용)
+// ==============================
+app.get("/api/chzzk/auth/callback", async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!code) {
+    return res.status(400).send("인증 코드가 없습니다.");
+  }
+
+  console.log("🔑 인증 코드 수신:", code);
+
+  try {
+    const tokenRes = await fetch("https://openapi.chzzk.naver.com/auth/v1/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grantType: "authorization_code",
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        code,
+        state,
+      }),
+    });
+
+    const data = await tokenRes.json();
+    if (data.accessToken) {
+      console.log("✅ Access Token 발급 성공:", data.accessToken);
+      console.log("🔁 Refresh Token:", data.refreshToken);
+
+      return res.send(`
+        <h2>✅ Access Token 발급 성공</h2>
+        <p><b>Access Token:</b> ${data.accessToken}</p>
+        <p><b>Refresh Token:</b> ${data.refreshToken}</p>
+        <p>이 토큰을 Render 환경변수(ACCESS_TOKEN, REFRESH_TOKEN)에 복사하세요.</p>
+      `);
+    } else {
+      console.error("❌ Access Token 발급 실패:", data);
+      return res.status(500).send("❌ Access Token 발급 실패. 콘솔 로그 확인 필요.");
+    }
+  } catch (err) {
+    console.error("❌ Access Token 요청 오류:", err);
+    return res.status(500).send("❌ 토큰 요청 중 오류 발생.");
+  }
+});
+
+// ==============================
+// 시청자 수 API
 // ==============================
 app.get("/api/viewers", async (req, res) => {
     const { channelId } = req.query;
@@ -203,7 +243,7 @@ app.get("/api/viewers", async (req, res) => {
 });
 
 // ==============================
-// 구독 상태 진단 API
+// 세션 구독 상태 확인용
 // ==============================
 app.get("/debug/subscriptions", async (_req, res) => {
     try {
@@ -223,7 +263,7 @@ app.get("/debug/subscriptions", async (_req, res) => {
 });
 
 // ==============================
-// CHAT 미수신 감시 (20초 조용하면 재구독)
+// CHAT 미수신 감시 (20초 무응답 시 재구독)
 // ==============================
 setInterval(() => {
     if (!lastSystemSessionKey) return;
