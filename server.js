@@ -51,7 +51,12 @@ function normalizeEmojis(raw) {
     } else if (typeof raw === 'object') {
       for (const code of Object.keys(raw)) {
         const v = raw[code];
-        let url = v?.url || v?.imageUrl || v?.src;
+        let url;
+        if (typeof v === 'string') {
+          url = /^https?:\/\//.test(v) ? v : undefined;
+        } else {
+          url = v?.url || v?.imageUrl || v?.src;
+        }
         if (!url && v && typeof v === 'object') {
           for (const k of Object.keys(v)) {
             if (typeof v[k] === 'string' && /^https?:\/\//.test(v[k])) { url = v[k]; break; }
