@@ -32,14 +32,14 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       headers: {
         "Content-Type": "application/json",
         "Client-Id": CLIENT_ID,
-        "Client-Secret": CLIENT_SECRET, // ✅ 추가됨
+        "Client-Secret": CLIENT_SECRET,
       },
       body: JSON.stringify({
         grant_type: "authorization_code",
         code,
         redirect_uri: "https://chzzk-overlay-server.onrender.com/api/chzzk/auth/callback",
         client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET, // ✅ 추가됨
+        client_secret: CLIENT_SECRET,
       }),
     });
 
@@ -59,7 +59,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 });
 
-// ✅ 세션 생성 함수 (POST 방식)
+// ✅ 세션 생성 함수 (수정 완료)
 async function createSession() {
   console.log("--- 채팅 연결 전체 프로세스 시작 ---");
 
@@ -71,6 +71,9 @@ async function createSession() {
       "Client-Secret": CLIENT_SECRET,
       "Content-Type": "application/json",
     },
+    body: JSON.stringify({
+      channelId: CHANNEL_ID, // ✅ 필수로 추가됨
+    }),
   });
 
   const result = await res.json();
