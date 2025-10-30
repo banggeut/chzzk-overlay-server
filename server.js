@@ -171,7 +171,7 @@ function connectChzzkSocketIO(sessionURL) {
       const emojis = data.emojis || {};
       const badges = data.profile?.badges || [];
 
-      // 💬 오버레이로 전송
+      // 💬 오버레이로 전송 (이벤트 이름: chatMessage)
       io.emit("chatMessage", { nickname, message });
       console.log("💬", nickname + ":", message);
 
@@ -225,6 +225,43 @@ async function startChatConnection() {
   }
 }
 
+
+// ⭐ [추가됨] 시청자 수 가져오기 및 클라이언트에게 전송
+async function getViewerCount() {
+    try {
+        // 치지직 API를 사용하여 시청자 수를 조회
+        const res = await fetch(`https://openapi.chzzk.naver.com/open/v1/channels/${CHANNEL_ID}/live-status`, {
+            headers: {
+                "Client-Id": CLIENT_ID,
+            },
+        });
+        const data = await res.json();
+        
+        if (data.code === 200 && data.content?.status === "OPEN" && data.content.liveViewerCount !== undefined) {
+            const count = data.content.liveViewerCount;
+            console.log(`👁️ 시청자 수: ${count}`);
+            // 모든 연결된 오버레이 클라이언트에게 시청자 수 전송
+            io.emit("viewerCount", count); 
+            return count;
+        } else {
+            // 방송 중이 아닐 경우
+            io.emit("viewerCount", 0);
+            return 0;
+        }
+    } catch (err) {
+        console.error("❌ 시청자 수 조회 오류:", err);
+        io.emit("viewerCount", 0);
+        return 0;
+    }
+}
+
+// ⭐ [추가됨] 시청자 수 주기적으로 업데이트
+async function startViewerCountUpdate() {
+    await getViewerCount(); // 서버 시작 시 즉시 1회 실행
+    // 30초마다 시청자 수 업데이트
+    setInterval(getViewerCount, 30000); 
+}
+
 // ✅ 인증 콜백
 app.get("/api/chzzk/auth/callback", async (req, res) => {
   const { code, state } = req.query;
@@ -253,7 +290,10 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       ACCESS_TOKEN = tokenData.content.accessToken;
       REFRESH_TOKEN = tokenData.content.refreshToken;
       tokenExpired = false;
+      
+      // 토큰 발급 후 채팅 및 시청자 수 업데이트 시작
       startChatConnection();
+      startViewerCountUpdate();
 
       res.send(`
         <html><head><meta charset="utf-8"/></head>
@@ -275,9 +315,10 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 });
 
-// ✅ 초기 연결 시작
+// ✅ 초기 연결 시작 (채팅 및 시청자 수 업데이트)
 (async () => {
   await startChatConnection();
+  await startViewerCountUpdate(); // 추가됨
 })();
 
 // ✅ 오버레이 클라이언트 연결

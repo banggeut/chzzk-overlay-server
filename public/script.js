@@ -7,6 +7,7 @@ const serverUrl = "https://chzzk-overlay-server.onrender.com";
 // HTML 요소 연결
 const chatMessages = document.getElementById("chatMessages");
 const viewerCountEl = document.getElementById("viewerCount");
+const heartContainer = document.getElementById("heartContainer"); // 추가: 하트 컨테이너 연결
 
 // ✅ Socket.IO로 서버와 연결
 const socket = io(serverUrl, {
@@ -16,8 +17,6 @@ const socket = io(serverUrl, {
 // 서버 연결 성공 시
 socket.on("connect", () => {
     console.log("🟢 오버레이 서버 연결됨:", socket.id);
-    // [수정 사항] 서버가 이미 CHANNEL_ID를 통해 구독 중이므로, 클라이언트의 joinChannel 요청은 제거합니다.
-    // socket.emit("joinChannel", { channelId }); 
 });
 
 // 실시간 시청자 수 업데이트
@@ -25,10 +24,10 @@ socket.on("viewerCount", (data) => {
     viewerCountEl.textContent = `👁️ ${data}`;
 });
 
-// [수정 사항] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'에서 'chat'으로 변경 (server.js와 일치)
-socket.on("chat", (msg) => {
-    // server.js에서 보내는 데이터 구조에 맞게 'content'를 'message'로 매핑하여 사용합니다.
-    addChatMessage(msg.nickname, msg.content); 
+// [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)
+socket.on("chatMessage", (msg) => {
+    // server.js에서 보내는 데이터 구조에 맞게 'content'가 아닌 'message'를 사용합니다.
+    addChatMessage(msg.nickname, msg.message); 
 });
 
 // 에러 및 연결 종료 처리
@@ -49,7 +48,7 @@ function addChatMessage(username, text) {
     `;
     chatMessages.appendChild(messageItem);
 
-    createHeart();
+    createHeart(); // 채팅 수신 시 하트 생성
 
     // 오래된 채팅 자동 제거 (최대 5개 유지)
     if (chatMessages.children.length > 5) {
@@ -58,26 +57,30 @@ function addChatMessage(username, text) {
         oldest.addEventListener('animationend', () => oldest.remove(), { once: true });
     }
 
+    // 스크롤을 맨 아래로 이동 (가장 최근 메시지 표시)
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ❤️ 채팅 효과 (기존 디자인 유지)
+// ❤️ 채팅 효과 (Instagram Live 스타일 복구)
 function createHeart() {
-    const heart = document.createElement('div');
-    heart.className = 'heart';
-    heart.textContent = '❤';
-    document.body.appendChild(heart);
+    const heartContainer = document.getElementById('heartContainer');
+    if (!heartContainer) return;
 
-    const startX = Math.random() * window.innerWidth;
-    heart.style.left = `${startX}px`;
+    const heart = document.createElement('img');
+    heart.className = 'heart-icon'; // style.css에서 정의한 애니메이션 클래스 사용
+    
+    // ⭐ 하트 이미지 리스트 (필요 시 웹 경로로 변경 필수) ⭐
+    const heartImages = ['heart_red.png', 'heart_pink.png', 'heart_yellow.png', 'heart_purple.png'];
+    const randomImage = heartImages[Math.floor(Math.random() * heartImages.length)];
+    
+    // 주의: 이 파일들도 OBS에서 보이려면 웹 접근 가능한 URL이어야 합니다.
+    heart.src = randomImage; 
 
-    const animation = heart.animate([
-        { transform: 'translateY(0)', opacity: 1 },
-        { transform: 'translateY(-200px)', opacity: 0 }
-    ], {
-        duration: 1500,
-        easing: 'ease-out'
-    });
+    // 하트 컨테이너 내에서 애니메이션 시작
+    heartContainer.appendChild(heart); 
 
-    animation.onfinish = () => heart.remove();
+    // style.css의 @keyframes heartRise에 따라 3초 후 DOM에서 제거
+    setTimeout(() => {
+        heart.remove();
+    }, 3000); // 애니메이션 시간 (3s)과 일치
 }
