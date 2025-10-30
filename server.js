@@ -18,7 +18,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer);
 app.use(express.json());
 
-// 폴더 경로 설정
+// 경로 설정
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
@@ -31,8 +31,54 @@ app.get("/", (req, res) => {
   }
 });
 
+// ✅ 인증 콜백 (Access Token 발급)
+app.get("/api/chzzk/auth/callback", async (req, res) => {
+  const { code, state } = req.query;
+  if (!code) return res.status(400).send("인증 코드가 없습니다.");
 
-// ✅ Access Token 자동 갱신
+  console.log("🔑 인증 코드 수신:", code);
+
+  try {
+    const tokenRes = await fetch("https://openapi.chzzk.naver.com/auth/v1/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grantType: "authorization_code",
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        code,
+        state,
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+
+    if (tokenData?.content?.accessToken) {
+      console.log("✅ Access Token 발급 성공:", tokenData.content.accessToken);
+      console.log("🔁 Refresh Token:", tokenData.content.refreshToken);
+
+      res.send(`
+        <html>
+          <head><meta charset="utf-8" /></head>
+          <body style="font-family:sans-serif; text-align:center; margin-top:50px;">
+            <h2>✅ 치지직 Access Token 발급 완료!</h2>
+            <p><strong>Access Token:</strong> ${tokenData.content.accessToken}</p>
+            <p><strong>Refresh Token:</strong> ${tokenData.content.refreshToken}</p>
+            <p>Render 환경변수에 추가하고 배포하면 됩니다.</p>
+          </body>
+        </html>
+      `);
+    } else {
+      console.log("❌ Access Token 발급 실패:", tokenData);
+      res.status(403).send(tokenData);
+    }
+  } catch (err) {
+    console.error("❌ 토큰 발급 중 오류:", err);
+    res.status(500).send("서버 오류 발생");
+  }
+});
+
+// ✅ Access Token 갱신
 async function refreshAccessToken() {
   console.log("🔄 Access Token 갱신 시도 중...");
   try {
@@ -52,7 +98,7 @@ async function refreshAccessToken() {
       ACCESS_TOKEN = data.content.accessToken;
       REFRESH_TOKEN = data.content.refreshToken;
       tokenExpired = false;
-      console.log("✅ Access Token 갱신 완료:", ACCESS_TOKEN.slice(0, 15) + "...");
+      console.log("✅ Access Token 갱신 완료:", ACCESS_TOKEN.slice(0, 20) + "...");
       return true;
     } else {
       console.log("❌ Access Token 갱신 실패:", data);
@@ -66,8 +112,7 @@ async function refreshAccessToken() {
   }
 }
 
-
-// ✅ 유저 세션 생성 (Access Token 기반)
+// ✅ 세션 생성
 async function createSession() {
   try {
     const res = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/auth", {
@@ -91,11 +136,9 @@ async function createSession() {
   return null;
 }
 
-
-// ✅ Socket.IO v2.0.3 연결 (치지직 공식 프로토콜 호환)
+// ✅ 치지직 소켓 연결 (v2 호환)
 function connectChzzkSocketIO(sessionURL) {
-  console.log("🔗 치지직 Socket.IO 연결 시도...");
-
+  console.log("🔗 치지직 소켓 연결 시도...");
   const [baseUrl, query] = sessionURL.split("?");
   const authToken = new URLSearchParams(query).get("auth");
 
@@ -106,13 +149,8 @@ function connectChzzkSocketIO(sessionURL) {
     query: { auth: authToken },
   });
 
-  socket.on("connect", () => {
-    console.log("✅ 소켓 연결 성공:", socket.id);
-  });
-
-  socket.on("SYSTEM", (data) => {
-    console.log("🟢 시스템 이벤트:", data);
-  });
+  socket.on("connect", () => console.log("✅ 소켓 연결 성공:", socket.id));
+  socket.on("SYSTEM", (data) => console.log("🟢 시스템 이벤트:", data));
 
   socket.on("CHAT", (data) => {
     try {
@@ -127,23 +165,18 @@ function connectChzzkSocketIO(sessionURL) {
   });
 
   socket.on("connect_error", async (err) => {
-    console.error("❌ 소켓 연결 오류:", err.message);
+    console.error("❌ 소켓 오류:", err.message);
     if (err.message.includes("401") || err.message.includes("INVALID_TOKEN")) {
-      console.log("🔄 Access Token 재갱신 시도...");
       const refreshed = await refreshAccessToken();
       if (refreshed) {
         const newSessionURL = await createSession();
         if (newSessionURL) connectChzzkSocketIO(newSessionURL);
-      } else {
-        console.error("❌ 토큰 재갱신 실패. 새 로그인 필요.");
-        tokenExpired = true;
-      }
+      } else tokenExpired = true;
     }
   });
 
   socket.on("disconnect", (reason) => {
-    console.warn("⚠️ 소켓 연결 종료:", reason);
-    console.log("⏳ 5초 후 재연결 시도...");
+    console.warn("⚠️ 소켓 종료:", reason);
     setTimeout(async () => {
       const newSessionURL = await createSession();
       if (newSessionURL) connectChzzkSocketIO(newSessionURL);
@@ -151,8 +184,7 @@ function connectChzzkSocketIO(sessionURL) {
   });
 }
 
-
-// ✅ 최초 세션 연결
+// ✅ 초기 연결
 (async () => {
   const sessionURL = await createSession();
   if (sessionURL) connectChzzkSocketIO(sessionURL);
@@ -164,14 +196,6 @@ function connectChzzkSocketIO(sessionURL) {
     } else tokenExpired = true;
   }
 })();
-
-
-// ✅ 오버레이 클라이언트
-io.on("connection", (socket) => {
-  console.log("🟢 오버레이 클라이언트 연결:", socket.id);
-  socket.on("disconnect", () => console.log("🔴 클라이언트 종료:", socket.id));
-});
-
 
 // ✅ 시청자 수 API
 app.get("/api/viewers", async (req, res) => {
@@ -188,8 +212,13 @@ app.get("/api/viewers", async (req, res) => {
   }
 });
 
+// ✅ 오버레이 클라이언트
+io.on("connection", (socket) => {
+  console.log("🟢 오버레이 클라이언트 연결:", socket.id);
+  socket.on("disconnect", () => console.log("🔴 클라이언트 종료:", socket.id));
+});
 
-// ✅ 서버 실행
+// ✅ 서버 시작
 httpServer.listen(PORT, () => {
   console.log(`✅ 서버 실행 중: 포트 ${PORT}`);
 });
