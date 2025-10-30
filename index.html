@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chzzk Live Chat Overlay</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="overlay">
+        <div class="top-info">
+            <div class="stream-info">
+                <img src="streamer_profile.png" class="profile-img" alt="Profile">
+                <span class="username">라빈 라비린스</span>
+            </div>
+            <div class="status">
+                <span class="live-badge">LIVE</span>
+                <span class="viewer">👁 <span id="viewerCount">0</span></span>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatMessages"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
