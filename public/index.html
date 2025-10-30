@@ -1,30 +1,28 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chzzk Live Chat Overlay</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chzzk Overlay</title>
+    <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="overlay">
-        <div class="top-info">
-            <div class="stream-info">
-                <img src="streamer_profile.png" class="profile-img" alt="Profile">
-                <span class="username">라빈 라비린스</span>
-            </div>
-            <div class="status">
-                <span class="live-badge">LIVE</span>
-                <span class="viewer">👁 <span id="viewerCount">0</span></span>
-            </div>
+    <div id="overlayContainer">
+        <!-- 상단 오른쪽 정보바 -->
+        <div class="top-right-status">
+            <div class="live-label">LIVE</div>
+            <div class="viewer-label">시청자</div>
+            <div id="viewerCount" class="viewer-count">0</div>
         </div>
 
-        <div class="chat-container" id="chatMessages"></div>
+        <!-- 채팅 메시지 영역 -->
+        <div id="chatMessages" class="chat-container"></div>
     </div>
 
+    <!-- Socket.IO 클라이언트 (반드시 script.js보다 위에 있어야 함) -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
+    <!-- 오버레이용 스크립트 -->
     <script src="script.js"></script>
-
 </body>
 </html>
