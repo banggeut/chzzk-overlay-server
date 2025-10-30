@@ -107,7 +107,7 @@ async function subscribeChatEvent(sessionKey) {
       },
       body: JSON.stringify({
         sessionKey,
-        channelId: CHANNEL_ID,
+        channelId: [CHANNEL_ID],
       }),
     });
 
