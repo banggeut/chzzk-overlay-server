@@ -5,7 +5,8 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
 import { fileURLToPath } from "url";
-import ioClient from "socket.io-client"; // socket.io-client@2.0.3 사용됨
+import ioClient from "socket.io-client";
+import { promises as fs } from 'fs'; // ⭐ 파일 시스템 모듈 추가 ⭐
 
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID;
 const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
@@ -26,10 +27,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
 
+// ⭐ [추가] 토큰 저장 파일 경로 설정 ⭐
+const TOKENS_FILE_PATH = path.join(__dirname, "chzzk_tokens.json");
+
 app.get("/", (req, res) => {
   if (tokenExpired) res.sendFile(path.join(__dirname, "public", "expired.html"));
   else res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+// ⭐ [새로 추가] 토큰을 파일에 저장하는 함수 ⭐
+async function saveTokens() {
+    try {
+        const tokens = JSON.stringify({ ACCESS_TOKEN, REFRESH_TOKEN }, null, 2);
+        await fs.writeFile(TOKENS_FILE_PATH, tokens);
+        console.log("💾 토큰 파일 저장 성공");
+    } catch (err) {
+        console.error("❌ 토큰 파일 저장 실패:", err);
+    }
+}
+
+// ⭐ [새로 추가] 파일에서 토큰을 불러오는 함수 ⭐
+async function loadTokens() {
+    try {
+        const data = await fs.readFile(TOKENS_FILE_PATH, 'utf-8');
+        const tokens = JSON.parse(data);
+        if (tokens.ACCESS_TOKEN && tokens.REFRESH_TOKEN) {
+            ACCESS_TOKEN = tokens.ACCESS_TOKEN;
+            REFRESH_TOKEN = tokens.REFRESH_TOKEN;
+            console.log("📁 파일에서 토큰 로드 성공");
+            return true;
+        }
+    } catch (err) {
+        console.log("🤷‍♂️ 토큰 파일이 없거나 읽기 실패. 환경 변수 사용 시도.");
+        return false;
+    }
+}
 
 // ✅ Access Token 갱신
 async function refreshAccessToken() {
@@ -52,6 +84,7 @@ async function refreshAccessToken() {
       REFRESH_TOKEN = data.content.refreshToken;
       tokenExpired = false;
       console.log("✅ Access Token 갱신 완료:", ACCESS_TOKEN.slice(0, 20) + "...");
+      await saveTokens(); // ⭐ 갱신 성공 시 파일에 저장 ⭐
       return true;
     } else {
       console.log("❌ Access Token 갱신 실패:", data);
@@ -100,7 +133,6 @@ async function subscribeChatEvent(sessionKey) {
   try {
     console.log("📨 구독 요청 보냄:", { sessionKey, channelId: CHANNEL_ID });
 
-    // ⭐ [수정 반영] 구독 요청 URL에 &channelId=${CHANNEL_ID}를 명시적으로 추가 ⭐
     const res = await fetch(
       `https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}&channelId=${CHANNEL_ID}`,
       {
@@ -119,7 +151,6 @@ async function subscribeChatEvent(sessionKey) {
     if (data.code === 200) {
       console.log(`✅ 채팅 이벤트 구독 요청 성공 (${CHANNEL_ID})`);
     } else {
-      // ⚠️ 구독 실패 시 로그 출력 강화
       console.error(`❌ 채팅 이벤트 구독 실패 (코드: ${data.code}):`, data);
     }
   } catch (err) {
@@ -135,7 +166,6 @@ function connectChzzkSocketIO(sessionURL) {
 
   if (chzzkSocket) chzzkSocket.disconnect();
 
-  // ⭐ Socket.IO v2.x 문법 및 Gist에 제시된 옵션 적용 ⭐
   const socket = ioClient(baseUrl, {
     transports: ["websocket"],
     reconnection: false, 
@@ -205,16 +235,22 @@ function connectChzzkSocketIO(sessionURL) {
     }
   });
 
-  // Gist에서 제시된 테스트 코드처럼 connect()를 명시적으로 호출
   socket.connect();
 }
 
 // ✅ 전체 연결
 async function startChatConnection() {
   console.log("--- 채팅 연결 전체 프로세스 시작 ---");
+
+  // ⭐ [수정] 파일에서 토큰 로드 시도 ⭐
+  if (!ACCESS_TOKEN && !REFRESH_TOKEN) {
+      await loadTokens();
+  }
+  
   if (!ACCESS_TOKEN || tokenExpired) {
     if (REFRESH_TOKEN) {
       const refreshed = await refreshAccessToken();
+      // ⭐ 갱신 성공 시 이미 saveTokens()를 호출했으므로 파일 저장은 여기서 할 필요 없음 ⭐
       if (!refreshed) {
         console.log("❌ Access Token 갱신 실패. 수동 인증 필요.");
         return;
@@ -251,7 +287,6 @@ async function getViewerCount() {
             io.emit("viewerCount", count); 
             return count;
         } else {
-            // 방송 중이 아닐 경우
             io.emit("viewerCount", 0);
             return 0;
         }
@@ -298,7 +333,8 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
       REFRESH_TOKEN = tokenData.content.refreshToken;
       tokenExpired = false;
       
-      // 토큰 발급 후 채팅 및 시청자 수 업데이트 시작
+      // ⭐ [수정 반영] 토큰 발급 후 파일 저장 및 연결 시작 ⭐
+      await saveTokens();
       startChatConnection();
       startViewerCountUpdate();
 
@@ -306,9 +342,8 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
         <html><head><meta charset="utf-8"/></head>
         <body style="font-family:sans-serif;text-align:center;margin-top:50px;">
           <h2>✅ 치지직 Access Token 발급 완료!</h2>
-          <p><strong>Access Token:</strong> ${tokenData.content.accessToken}</p>
-          <p><strong>Refresh Token:</strong> ${tokenData.content.refreshToken}</p>
-          <p>Render 환경변수에 추가하고 배포하면 됩니다.</p>
+          <p>새 토큰이 서버에 저장되었습니다. 이제 Render 서비스의 **[Manual Deploy] 버튼**을 눌러 수동 재배포를 진행해 주세요!</p>
+          <p>Render는 컨테이너를 새로 생성해야 저장된 토큰 파일을 인식할 수 있습니다.</p>
           <p>⚠️ Access Token 발급 시 scope에 <strong>chat openid profile email</strong> 포함 필수</p>
         </body></html>
       `);
@@ -322,7 +357,7 @@ app.get("/api/chzzk/auth/callback", async (req, res) => {
   }
 });
 
-// ✅ 초기 연결 시작 (채팅 및 시청자 수 업데이트)
+// ✅ 초기 연결 시작 (파일 로드 시도 후 시작)
 (async () => {
   await startChatConnection();
   await startViewerCountUpdate();
