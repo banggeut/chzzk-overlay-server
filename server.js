@@ -6,7 +6,7 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ 고정된 채널 ID
+// ✅ 치지직 환경변수
 const CHZZK_CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212";
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID;
 const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
@@ -16,9 +16,10 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
+// ✅ Express 기본 라우트
 app.get("/", (req, res) => res.send("✅ Chzzk Overlay Server Running!"));
 
-// ✅ Express 서버 시작
+// ✅ 서버 실행
 const server = app.listen(PORT, () => {
   console.log(`✅ 서버 실행 중: 포트 ${PORT}`);
 });
@@ -36,39 +37,38 @@ wss.on("connection", (ws) => {
   });
 });
 
-// ✅ 치지직 API 연결 로직
+// ✅ 치지직 실시간 채팅 연결 함수
 async function connectChzzkChat() {
   console.log("🔗 치지직 WebSocket 연결 시도...");
 
   try {
-    // 1️⃣ 세션 생성
-    const sessionRes = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions", {
-      method: "POST",
+    // 1️⃣ 세션 인증 요청 (GET 방식)
+    const authRes = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions/auth/client", {
+      method: "GET",
       headers: {
+        "Client-Id": CLIENT_ID,
+        "Client-Secret": CLIENT_SECRET,
         "Content-Type": "application/json",
-        "X-Naver-Client-Id": CLIENT_ID,
-        "X-Naver-Client-Secret": CLIENT_SECRET,
       },
-      body: JSON.stringify({}),
     });
 
-    if (!sessionRes.ok) {
-      console.error("❌ 세션 생성 실패:", sessionRes.status, await sessionRes.text());
+    if (!authRes.ok) {
+      console.error("❌ 세션 생성 실패:", authRes.status, await authRes.text());
       setTimeout(connectChzzkChat, 5000);
       return;
     }
 
-    const sessionData = await sessionRes.json();
-    const { sessionKey, serverUrl } = sessionData.content;
-    console.log("✅ 세션 생성 성공:", sessionKey);
+    const authData = await authRes.json();
+    const { sessionKey, serverUrl } = authData.content;
+    console.log("✅ 세션 인증 성공:", sessionKey);
 
-    // 2️⃣ 채팅 구독
+    // 2️⃣ 채팅 구독 요청 (POST)
     const subRes = await fetch(`https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`, {
       method: "POST",
       headers: {
+        "Client-Id": CLIENT_ID,
+        "Client-Secret": CLIENT_SECRET,
         "Content-Type": "application/json",
-        "X-Naver-Client-Id": CLIENT_ID,
-        "X-Naver-Client-Secret": CLIENT_SECRET,
       },
       body: JSON.stringify({
         channelId: CHZZK_CHANNEL_ID,
