@@ -6,7 +6,7 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ 고정된 환경 변수
+// ✅ 고정된 채널 ID
 const CHZZK_CHANNEL_ID = "f00f6d46ecc6d735b96ecf376b9e5212";
 const CLIENT_ID = process.env.CHZZK_CLIENT_ID;
 const CLIENT_SECRET = process.env.CHZZK_CLIENT_SECRET;
@@ -18,10 +18,12 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
 
 app.get("/", (req, res) => res.send("✅ Chzzk Overlay Server Running!"));
 
+// ✅ Express 서버 시작
 const server = app.listen(PORT, () => {
   console.log(`✅ 서버 실행 중: 포트 ${PORT}`);
 });
 
+// ✅ 오버레이용 WebSocket 서버
 const wss = new WebSocketServer({ server });
 let overlayClients = [];
 
@@ -34,10 +36,34 @@ wss.on("connection", (ws) => {
   });
 });
 
+// ✅ 치지직 API 연결 로직
 async function connectChzzkChat() {
   console.log("🔗 치지직 WebSocket 연결 시도...");
+
   try {
-    const response = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions", {
+    // 1️⃣ 세션 생성
+    const sessionRes = await fetch("https://openapi.chzzk.naver.com/open/v1/sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Naver-Client-Id": CLIENT_ID,
+        "X-Naver-Client-Secret": CLIENT_SECRET,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!sessionRes.ok) {
+      console.error("❌ 세션 생성 실패:", sessionRes.status, await sessionRes.text());
+      setTimeout(connectChzzkChat, 5000);
+      return;
+    }
+
+    const sessionData = await sessionRes.json();
+    const { sessionKey, serverUrl } = sessionData.content;
+    console.log("✅ 세션 생성 성공:", sessionKey);
+
+    // 2️⃣ 채팅 구독
+    const subRes = await fetch(`https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat?sessionKey=${sessionKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -46,20 +72,18 @@ async function connectChzzkChat() {
       },
       body: JSON.stringify({
         channelId: CHZZK_CHANNEL_ID,
-        events: ["chat", "viewer_count"],
       }),
     });
 
-    if (!response.ok) {
-      console.error("❌ 치지직 API 오류:", response.status, await response.text());
+    if (!subRes.ok) {
+      console.error("❌ 채팅 구독 실패:", subRes.status, await subRes.text());
       setTimeout(connectChzzkChat, 5000);
       return;
     }
 
-    const data = await response.json();
-    const { sessionKey, serverUrl } = data.content;
+    console.log("✅ 채팅 구독 성공, WebSocket 연결 중...");
 
-    console.log("✅ 세션 발급 성공:", sessionKey);
+    // 3️⃣ WebSocket 연결
     const chatSocket = new WebSocket(`${serverUrl}?sessionKey=${sessionKey}`);
 
     chatSocket.on("open", () => console.log("✅ 치지직 실시간 채팅 연결 완료"));
@@ -67,6 +91,7 @@ async function connectChzzkChat() {
     chatSocket.on("message", (msg) => {
       try {
         const data = JSON.parse(msg.toString());
+
         if (data.type === "chat") {
           broadcast({
             type: "chat",
@@ -82,12 +107,12 @@ async function connectChzzkChat() {
           });
         }
       } catch (err) {
-        console.error("데이터 파싱 오류:", err);
+        console.error("⚠️ 데이터 파싱 오류:", err);
       }
     });
 
     chatSocket.on("close", () => {
-      console.warn("⚠️ 닫힘. 5초 후 재연결");
+      console.warn("⚠️ WebSocket 닫힘. 5초 후 재연결 시도");
       setTimeout(connectChzzkChat, 5000);
     });
 
@@ -102,6 +127,7 @@ async function connectChzzkChat() {
   }
 }
 
+// ✅ 오버레이에 브로드캐스트
 function broadcast(obj) {
   const str = JSON.stringify(obj);
   overlayClients.forEach(client => {
@@ -109,4 +135,5 @@ function broadcast(obj) {
   });
 }
 
+// ✅ 시작
 connectChzzkChat();
