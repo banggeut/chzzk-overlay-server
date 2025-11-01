@@ -3,7 +3,6 @@ const serverUrl = window.location.origin;
 
 // HTML 요소 연결
 const chatMessages = document.getElementById("chatMessages");
-const viewerCountEl = document.getElementById("viewerCount");
 const heartContainer = document.getElementById("heartContainer"); // 추가: 하트 컨테이너 연결
 
 // ✅ Socket.IO로 서버와 연결
@@ -17,14 +16,12 @@ socket.on("connect", () => {
 });
 
 // 실시간 시청자 수 업데이트
-socket.on("viewerCount", (data) => {
-    viewerCountEl.textContent = `👁️ ${data}`;
-});
+// (시청자 수 기능 제거)
 
 // [수정 완료] 실시간 채팅 메시지 수신 이벤트 이름을 'chatMessage'로 변경 (server.js와 일치)
 socket.on("chatMessage", (msg) => {
-    // server.js에서 보내는 데이터 구조에 맞게 'content'가 아닌 'message'를 사용합니다.
-    addChatMessage(msg.nickname, msg.message); 
+    try { console.log("🧩 client emojis:", msg && msg.emojis); } catch {}
+    addChatMessage(msg.nickname, renderMessageWithEmojis(msg.message, msg.emojis)); 
 });
 
 // 에러 및 연결 종료 처리
@@ -33,14 +30,21 @@ socket.on("disconnect", () => {
 });
 
 // ✅ 채팅 메시지 DOM에 추가
-function addChatMessage(username, text) {
+function addChatMessage(username, html) {
+    const profiles = [
+        'default_profile.png',
+        'default_profile2.png',
+        'default_profile3.png',
+        'default_profile4.png'
+    ];
+    const profileSrc = profiles[Math.floor(Math.random() * profiles.length)];
     const messageItem = document.createElement('div');
     messageItem.classList.add('chat-message-item');
     messageItem.innerHTML = `
-        <img src="default_profile.png" class="chat-profile-img" alt="Profile">
+        <img src="${profileSrc}" class="chat-profile-img" alt="Profile">
         <div class="chat-text-container">
             <span class="chat-username">${username}</span>
-            <span class="chat-text">${text}</span>
+            <span class="chat-text">${html}</span>
         </div>
     `;
     chatMessages.appendChild(messageItem);
@@ -58,6 +62,33 @@ function addChatMessage(username, text) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// 이모지 렌더링: {:code:} 형태 토큰을 이미지로 치환
+function renderMessageWithEmojis(text, emojis) {
+    if (!text) return "";
+    // 기본 이스케이프
+    let safe = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    const fallbackMap = { d_4: 'https://ssl.pstatic.net/static/nng/glive/icon/cha04.png' };
+    const emojiMap = (emojis && typeof emojis === 'object' && Object.keys(emojis).length > 0) ? emojis : fallbackMap;
+    try {
+        for (const code in emojiMap) {
+            if (!Object.prototype.hasOwnProperty.call(emojiMap, code)) continue;
+            const info = emojiMap[code];
+            const url = (typeof info === 'string') ? info : ((info && (info.url || info.imageUrl || info.src)) || null);
+            if (!url) continue;
+            // 토큰 형태 정확 매칭: {:code:} 와 :code:
+            const tokens = [`{:${code}:}`, `:${code}:`];
+            for (const token of tokens) {
+                const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                safe = safe.replace(new RegExp(escaped, 'g'), `<img src="${url}" class="emoji" alt="${code}">`);
+            }
+        }
+    } catch {}
+    return safe;
+}
+
 // ❤️ 채팅 효과 (Instagram Live 스타일 복구)
 function createHeart() {
     const heartContainer = document.getElementById('heartContainer');
@@ -73,11 +104,19 @@ function createHeart() {
     // 주의: 이 파일들도 OBS에서 보이려면 웹 접근 가능한 URL이어야 합니다.
     heart.src = randomImage; 
 
-    // 하트 컨테이너 내에서 애니메이션 시작
-    heartContainer.appendChild(heart); 
+    // 애니메이션 자연스러움 향상: 약간의 좌우 오프셋/회전/시간 랜덤화
+    const offsetPx = Math.floor((Math.random() - 0.5) * 16); // -8px ~ +8px
+    heart.style.marginLeft = `${offsetPx}px`;
+    const deg = (Math.random() - 0.5) * 12; // -6deg ~ +6deg
+    heart.style.transform += ` rotate(${deg}deg)`;
+    const duration = 2.7 + Math.random() * 0.6; // 2.7s ~ 3.3s
+    heart.style.setProperty('--dur', `${duration}s`);
 
-    // style.css의 @keyframes heartRise에 따라 3초 후 DOM에서 제거
+    // 하트 컨테이너 내에서 애니메이션 시작
+    heartContainer.appendChild(heart);
+
+    // 애니메이션 종료 후 제거
     setTimeout(() => {
         heart.remove();
-    }, 3000); // 애니메이션 시간 (3s)과 일치
+    }, duration * 1000);
 }
