@@ -52,7 +52,7 @@ function addChatMessage(username, html) {
     createHeart(); // 채팅 수신 시 하트 생성
 
     // 오래된 채팅 자동 제거 (최대 5개 유지)
-    if (chatMessages.children.length > 5) {
+    while (chatMessages.children.length > 5) {
         const oldest = chatMessages.firstElementChild;
         oldest.classList.add('fade-out');
         oldest.addEventListener('animationend', () => oldest.remove(), { once: true });
