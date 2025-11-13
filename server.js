@@ -118,7 +118,7 @@ async function loadTokens() {
     }
 }
 
-// ✅ 토큰 자동 갱신 시작 (20분마다)
+// ✅ 토큰 자동 갱신 시작 (15분마다)
 function startAutoTokenRefresh() {
     // 기존 interval 정리
     if (tokenRefreshInterval) {
@@ -126,15 +126,30 @@ function startAutoTokenRefresh() {
         tokenRefreshInterval = null;
     }
     
-    // 새로 시작 (20분 = 1,200,000ms)
+    // 새로 시작 (15분 = 900,000ms)
     tokenRefreshInterval = setInterval(async () => {
         if (REFRESH_TOKEN) {
             console.log("⏰ 자동 토큰 갱신 시간 도래");
-            await refreshAccessToken();
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+                // 갱신 성공 시 연결 재확인
+                if (!chzzkSocket || !chzzkSocket.connected) {
+                    console.log("🔄 연결 끊김 감지, 재연결 시도...");
+                    setTimeout(startChatConnection, 2000);
+                }
+            } else {
+                // 갱신 실패 시 재시도 (5분 후)
+                console.log("⏰ 토큰 갱신 실패, 5분 후 재시도 예약...");
+                setTimeout(async () => {
+                    if (REFRESH_TOKEN) {
+                        await refreshAccessToken();
+                    }
+                }, 5 * 60 * 1000);
+            }
         }
-    }, 20 * 60 * 1000); // 20분
+    }, 15 * 60 * 1000); // 15분
     
-    console.log("⏰ 자동 토큰 갱신 시작 (20분마다)");
+    console.log("⏰ 자동 토큰 갱신 시작 (15분마다)");
 }
 
 // ✅ Access Token 갱신
@@ -341,16 +356,34 @@ function connectChzzkSocketIO(sessionURL) {
     console.error("❌ 소켓 연결 오류:", err.message || err);
     if (err.message && (err.message.includes("401") || err.message.includes("INVALID_TOKEN"))) {
       chzzkSocket.disconnect();
-      console.log("토큰 오류 발생. 5초 후 채팅 연결 재시도...");
-      setTimeout(startChatConnection, 5000);
+      console.log("토큰 오류 발생. 토큰 갱신 후 재연결 시도...");
+      if (REFRESH_TOKEN) {
+        refreshAccessToken().then((refreshed) => {
+          if (refreshed) {
+            setTimeout(startChatConnection, 2000);
+          } else {
+            setTimeout(startChatConnection, 5000);
+          }
+        });
+      } else {
+        setTimeout(startChatConnection, 5000);
+      }
     }
   });
 
   socket.on("disconnect", (reason) => {
     console.warn("⚠️ 소켓 종료:", reason);
     if (reason !== "io client disconnect") {
-      console.log("5초 후 연결 재시도...");
-      setTimeout(startChatConnection, 5000);
+      // 예상치 못한 연결 끊김 시 토큰 확인 후 재연결
+      if (REFRESH_TOKEN && (reason === "transport close" || reason === "ping timeout")) {
+        console.log("🔄 연결 끊김, 토큰 확인 후 재연결 시도...");
+        refreshAccessToken().then((refreshed) => {
+          setTimeout(startChatConnection, refreshed ? 2000 : 5000);
+        });
+      } else {
+        console.log("5초 후 연결 재시도...");
+        setTimeout(startChatConnection, 5000);
+      }
     }
   });
 
@@ -386,8 +419,20 @@ async function startChatConnection() {
     connectChzzkSocketIO(sessionURL);
     startAutoTokenRefresh(); // 자동 갱신 시작
   } else {
-    console.log("❌ 세션 생성 실패. 5초 후 재시도...");
-    setTimeout(startChatConnection, 5000);
+    // 세션 생성 실패 시 토큰 갱신 먼저 시도
+    if (REFRESH_TOKEN && !tokenExpired) {
+      console.log("🔄 세션 생성 실패, 토큰 갱신 후 재시도...");
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        setTimeout(startChatConnection, 2000);
+      } else {
+        console.log("❌ 토큰 갱신 실패. 5초 후 재시도...");
+        setTimeout(startChatConnection, 5000);
+      }
+    } else {
+      console.log("❌ 세션 생성 실패. 5초 후 재시도...");
+      setTimeout(startChatConnection, 5000);
+    }
   }
 }
 
